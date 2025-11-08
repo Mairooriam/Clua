@@ -1,0 +1,69 @@
+cmake_minimum_required(VERSION 3.10)
+project(Clua C)
+
+# Set C standard to C11
+set(CMAKE_C_STANDARD 23)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Enable all warnings and sanitizers for GCC/Clang
+if(MSVC)
+    add_compile_options(/W4)
+else()
+    add_compile_options(
+        -Wall
+        -Wextra
+        -Wpedantic
+        -fdiagnostics-color=always
+        -Wno-newline-eof
+    )
+endif()
+# Source files
+set(SOURCES
+    src/main.c
+    src/utils.c
+    src/lexer.c
+    src/interpreter.c
+    src/ast.c
+    src/log.c
+    src/parser.c
+    modules/mirua_module.c
+    modules/mirua_to_string.c
+    modules/mirua_serialization.c
+    src/debug_buf.c
+    src/utils.c
+)
+
+set(OPEN62541_BUILD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../deps/build)
+set(OPEN62541_INCLUDE_DIR ${OPEN62541_BUILD_DIR}/_deps/open62541-src/include)
+set(OPEN62541_PLUGIN_INCLUDE_DIR ${OPEN62541_BUILD_DIR}/_deps/open62541-src/plugins/include)
+set(OPEN62541_GENERATED_INCLUDE_DIR ${OPEN62541_BUILD_DIR}/_deps/open62541-build/src_generated)
+set(OPEN62541_LIB_FILE ${OPEN62541_BUILD_DIR}/bin/libopen62541.a)
+include_directories(
+    ${OPEN62541_GENERATED_INCLUDE_DIR}
+    ${OPEN62541_INCLUDE_DIR}
+    ${OPEN62541_PLUGIN_INCLUDE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/modules
+)
+link_directories(
+    ${OPEN62541_BUILD_DIR}/bin
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib
+)
+
+
+# Executable
+add_executable(main ${SOURCES})
+target_compile_definitions(main PRIVATE LOG_USE_COLOR)
+
+# Paths to the prebuilt open62541 (adjust if you use different build dir)
+
+
+if(EXISTS ${OPEN62541_LIB_FILE})
+    target_link_libraries(main PRIVATE ${OPEN62541_LIB_FILE} ws2_32 iphlpapi)
+else()
+    message(WARNING "open62541 library not found at ${OPEN62541_LIB_FILE}. Run misc\\build_open62541.bat first or adjust OPEN62541_BUILD_DIR.")
+endif()

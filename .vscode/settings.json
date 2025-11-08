@@ -1,0 +1,25 @@
+{
+    "files.associations": {
+        "*.py": "python",
+        "mirua_module.h": "c",
+        "client_config_default.h": "c",
+        "log.h": "c",
+        "debug_buf.h": "c",
+        "charconv": "c",
+        "chrono": "c",
+        "optional": "c",
+        "format": "c",
+        "ratio": "c",
+        "system_error": "c",
+        "array": "c",
+        "functional": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c",
+        "common.h": "c",
+        "ziptree.h": "c",
+        "types.h": "c",
+        "mirua_types.h": "c",
+        "minwinbase.h": "c"
+    }
+}
