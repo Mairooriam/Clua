@@ -8,7 +8,7 @@
 #include "lexer.h"
 #include "mirua_module.h"
 #include "parser.h"
-#include "utils.h"
+#include "modules/file/file_module.h"
 #define MAX_INPUT_SIZE 1024
 const char* CONFIG_PATH = "\\config";
 const char* CONFIG_FILENAME = "config.mir";

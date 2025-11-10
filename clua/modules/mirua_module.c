@@ -206,20 +206,81 @@ void mirua_execute(MiruaContext* ctx, ASTNode* node) {
     // }
 }
 void mirua_save(MiruaContext* ctx, int start, int end) {
-    char buf[1024];
-    MiruaNodeSerializer* serializer = mirua_serializer_get(SERIALIZER_TELEGRF);
+    // GETTING RANGE OF NODES 
+    mirua_t_NodeList subset;
+    size_t range_size = (end >= start && (size_t)end < ctx->currentChildren.size) ? (size_t)(end - start + 1) : 0;
+    mirua_init_nodeList(&subset, range_size);
 
-    if (start && end) {
-        log_trace("[SAVE] - Serializing children from %d to %d\n", start, end - 1);
-        buf[0] = '\0';
-        serializer->serialize_nodes(buf, sizeof(buf), &ctx->currentChildren);
-        log_trace("[SAVE] - Serialized nodes:\n %s\n", buf);
-
-    } else {
-        // No range: serialize current node only
-        serializer->serialize_node(buf, sizeof(buf), &ctx->currentNode);
-        log_trace("[SAVE] - Serialized node: %s\n", buf);
+    for (size_t i = (size_t)start; i <= (size_t)end && i < ctx->currentChildren.size; i++) {
+        if (subset.size >= subset.capacity) {
+            size_t new_cap = subset.capacity * 2;
+            MiruaNodeId* new_nodes = realloc(subset.nodeIds, sizeof(MiruaNodeId) * new_cap);
+            if (!new_nodes) {
+                log_error("[SAVE] Failed to resize subset list");
+                mirua_free_nodeList(&subset);
+                return;
+            }
+            subset.nodeIds = new_nodes;
+            subset.capacity = new_cap;
+        }
+        mirua_nodeId_init(&subset.nodeIds[subset.size]);
+        mirua_nodeId_copy(&ctx->currentChildren.nodeIds[i], &subset.nodeIds[subset.size]);
+        subset.size++;
     }
+
+
+    // FILE HANDLING
+    const char* filename = ctx->config.output_path ? ctx->config.output_path : "output_file.txt";
+    bool filename_allocated = false;
+    const char* mode = "w";
+    FILE* check_file = fopen(filename, "r");
+    if (check_file) {
+        fclose(check_file);
+        printf("File '%s' already exists. Overwrite (o), Append (a), or New name (n)? ", filename);
+        char response = getchar();
+        while (getchar() != '\n');  // Consume newline
+        if (response == 'a' || response == 'A') {
+            mode = "a";
+        } else if (response == 'n' || response == 'N') {
+            printf("Enter new filename: ");
+            char new_filename[256];
+            if (fgets(new_filename, sizeof(new_filename), stdin)) {
+                new_filename[strcspn(new_filename, "\n")] = '\0';
+                filename = strdup(new_filename);
+                if (!filename) {
+                    log_error("[SAVE] Failed to allocate memory for filename");
+                    mirua_free_nodeList(&subset);
+                    return;
+                }
+                filename_allocated = true;
+            } else {
+                printf("Invalid input, using default.\n");
+            }
+        } else if (response != 'o' && response != 'O') {
+            printf("Invalid choice, using default (overwrite).\n");
+        }
+    }
+
+    FILE* f = fopen(filename, mode);
+    if (!f) {
+        log_error("[SAVE] Failed to open file '%s' for %s", filename, mode[0] == 'a' ? "appending" : "writing");
+        if (filename_allocated) free((char*)filename);
+        mirua_free_nodeList(&subset);
+        return;
+    }
+
+    // SERIALIZING
+    log_trace("[SAVE] Serializing children from %d to %d to '%s' (%s)", start, end - 1, filename, mode[0] == 'a' ? "appending" : "overwriting");
+    MiruaNodeSerializer* serializer = mirua_serializer_get(SERIALIZER_TELEGRF);
+    if (serializer->serialize_nodes_to_file(&subset, f) == SIZE_MAX) {
+        log_error("[SAVE] Serialization failed or buffer overflow");
+    } else {
+        log_trace("[SAVE] Successfully %s to '%s'", mode[0] == 'a' ? "appended" : "saved", filename);
+    }
+
+    fclose(f);
+    if (filename_allocated) free((char*)filename);
+    mirua_free_nodeList(&subset);
 }
 MiruaState mirua_state_get(MiruaContext* ctx) {
     return ctx->state;
@@ -306,6 +367,8 @@ MiruaContext* mirua_module_create(void) {
     //  } else {
     ctx->config.endpoint = strdup("opc.tcp://127.0.0.1:4840");
     ctx->config.defaultRoot = UA_NODEID_NUMERIC(0, 85);
+    ctx->config.output_path = "output.txt";
+
     // }
     ctx->config.selectedDataTypeKinds = DEFAULT_DATATYPE_FILTER_MASK;
     ctx->state = MIRUA_STATE_NORMAL;
@@ -408,11 +471,64 @@ int mirua_connect(MiruaContext* ctx, const char* endpoint) {
 void mirua_explore_children(MiruaContext* ctx, mirua_t_NodeList* nodes, const UA_NodeId* node) {
     mirua_clear_nodeList(nodes);
 
-    MiruaNodeFilter filter = mirua_filter_get_func(ctx->config.filterType);
-    MiruaCallbackHandle handle = {
-        .nodes = nodes, .client = ctx->client, .filter = filter, .userData = ctx};
+    UA_BrowseRequest bReq;
+    UA_BrowseRequest_init(&bReq);
+    bReq.nodesToBrowseSize = 1;
+    bReq.nodesToBrowse = UA_Array_new(1, &UA_TYPES[UA_TYPES_BROWSEDESCRIPTION]);
+    UA_BrowseDescription_init(&bReq.nodesToBrowse[0]);
+    UA_NodeId_copy(node, &bReq.nodesToBrowse[0].nodeId);
+    bReq.nodesToBrowse[0].browseDirection = UA_BROWSEDIRECTION_FORWARD;
+    bReq.nodesToBrowse[0].referenceTypeId = UA_NODEID_NUMERIC(
+        0, UA_NS0ID_HIERARCHICALREFERENCES);  // Hierarchical references (includes HasComponent)
+    bReq.nodesToBrowse[0].includeSubtypes = true;
+    bReq.nodesToBrowse[0].nodeClassMask = 0;
+    bReq.nodesToBrowse[0].resultMask = UA_BROWSERESULTMASK_ALL;
 
-    UA_Client_forEachChildNodeCall(ctx->client, *node, mirua_cb_collectNodes_to_nodelist, &handle);
+    UA_BrowseResponse bResp = UA_Client_Service_browse(ctx->client, bReq);
+
+    // Process results
+    if (bResp.resultsSize > 0) {
+        for (size_t i = 0; i < bResp.results[0].referencesSize; ++i) {
+            UA_ReferenceDescription* ref = &bResp.results[0].references[i];
+
+            MiruaNodeFilter filter = mirua_filter_get_func(ctx->config.filterType);
+            if (filter && !filter(ref->nodeId.nodeId, ref->referenceTypeId, ctx->client, ctx)) {
+                continue;
+            }
+
+            if (nodes->size >= nodes->capacity) {
+                size_t new_cap = nodes->capacity * 2;
+                MiruaNodeId* new_nodes = realloc(nodes->nodeIds, sizeof(MiruaNodeId) * new_cap);
+                if (!new_nodes) {
+                    log_error("[EXPLORE] Failed to resize node list");
+                    break;
+                }
+                nodes->nodeIds = new_nodes;
+                nodes->capacity = new_cap;
+            }
+
+            // Initialize and copy the node
+            mirua_nodeId_init(&nodes->nodeIds[nodes->size]);
+            UA_NodeId_copy(&ref->nodeId.nodeId, &nodes->nodeIds[nodes->size].nodeid);
+            UA_QualifiedName_copy(&ref->browseName, &nodes->nodeIds[nodes->size].name);
+            nodes->size++;
+        }
+    } else {
+        log_warn("[EXPLORE] Browse failed or no results for node");
+    }
+
+    UA_BrowseRequest_clear(&bReq);
+    UA_BrowseResponse_clear(&bResp);
+
+    // Testing raw brwose from open65421 for easier addition of stuff
+    //  mirua_clear_nodeList(nodes);
+
+    // MiruaNodeFilter filter = mirua_filter_get_func(ctx->config.filterType);
+    // MiruaCallbackHandle handle = {
+    //     .nodes = nodes, .client = ctx->client, .filter = filter, .userData = ctx};
+
+    // UA_Client_forEachChildNodeCall(ctx->client, *node, mirua_cb_collectNodes_to_nodelist,
+    // &handle);
 }
 
 bool mirua_node_exists(UA_Client* client, const UA_NodeId* node) {
@@ -1145,48 +1261,11 @@ void mirua_config_print(const MiruaConfig* config) {
     for (size_t i = 0; i < mirua_config_mapping_count; ++i) {
         const MiruaConfigMapping* map = &mirua_config_mappings[i];
         printf("[%zu] %s: ", i, map->name);
-        switch (map->type) {
-            case MIRUA_CONFIG_TYPE_STRING: {
-                char** field = (char**)((char*)config + map->offset);
-                printf("%s\n", *field);
-                break;
-            }
-            case MIRUA_CONFIG_TYPE_NODEID: {
-                UA_NodeId* field = (UA_NodeId*)((char*)config + map->offset);
-                UA_String str;
-                UA_String_init(&str);
-                UA_NodeId_printEx(field, &str, NULL);
-                printf("%.*s\n", (int)str.length, str.data);
-                UA_String_clear(&str);
-                break;
-            }
-            case MIRUA_CONFIG_TYPE_FILTER: {
-                uint32_t field_value = *(uint32_t*)((char*)config + map->offset);
-                printf("0x%08X ", field_value);
-                printf("Binary: ");
-                for (int i = 31; i >= 0; i--) {
-                    printf("%d", (field_value >> i) & 1);
-                    if (i % 4 == 0 && i != 0) printf(" ");
-                }
-                printf("\n");
-                break;
-            }
-            case MIRUA_CONFIG_TYPE_FILTER_FUNC: {
-                printf("%s\n", mirua_filter_get_name(config->filterType));
-                break;
-            }
-            case MIRUA_CONFIG_TYPE_PRINT_LEVEL: {
-                int* field = (int*)((char*)config + map->offset);
-                printf("%d\n", *field);
-                break;
-            }
-            default: {
-                log_warn("[CONFIG] Unhandled config type %d for key '%s'", map->type, map->name);
-                break;
-            }
-        }
+        mirua_config_print_field(config, map, false);  // Summary mode
+        printf("\n");
     }
 }
+
 
 void mirua_config_print_ctx(MiruaContext* ctx) {
     mirua_config_print(&ctx->config);
@@ -1243,12 +1322,75 @@ void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value)
             int* field = (int*)((char*)config + map->offset);
             *field = atoi(value);
         } break;
+
+        case MIRUA_CONFIG_TYPE_FILE_OUTPUT_PATH: {
+            char** field = (char**)((char*)config + map->offset);
+            free(*field);
+            *field = strdup(value);
+        } break;
         default: {
             log_error("[CONFIG] Unknown config type %d for key '%s'", map->type, map->name);
             break;
         }
     }
 }
+void mirua_config_print_by_idx(MiruaContext* ctx, size_t idx) {
+    if (idx >= mirua_config_mapping_count) {
+        log_warn("[CONFIG] Index %zu out of range", idx);
+        return;
+    }
+    const MiruaConfigMapping* map = &mirua_config_mappings[idx];
+    printf("[%zu] %s: ", idx, map->name);
+    mirua_config_print_field(&ctx->config, map, true);
+    printf("\n");
+}
+void mirua_config_print_field(const MiruaConfig* config, const MiruaConfigMapping* map, bool detailed) {
+    switch (map->type) {
+        case MIRUA_CONFIG_TYPE_STRING: {
+            char* field_value = *(char**) ((char*)config + map->offset);
+            printf("%s", field_value ? field_value : "(null)");
+        } break;
+        case MIRUA_CONFIG_TYPE_NODEID: {
+            UA_NodeId* field = (UA_NodeId*)((char*)config + map->offset);
+            UA_String str;
+            UA_String_init(&str);
+            UA_NodeId_printEx(field, &str, NULL);
+            printf("%.*s\n", (int)str.length, str.data);
+            UA_String_clear(&str);
+        } break;
+        case MIRUA_CONFIG_TYPE_FILTER: {
+            uint32_t field_value = *(uint32_t*) ((char*)config + map->offset);
+            printf("0x%08X ", field_value);
+            if (detailed) {
+                printf("Binary: ");
+                for (int i = 31; i >= 0; i--) {
+                    printf("%d", (field_value >> i) & 1);
+                    if (i % 4 == 0 && i != 0) printf(" ");
+                }
+                printf("\n");
+                mirua_config_print_enabled_data_types(field_value);
+            } else {
+                printf("(use 'ls %zu' for details)", map - mirua_config_mappings);  // Index hint
+            }
+        } break;
+        case MIRUA_CONFIG_TYPE_FILTER_FUNC: {
+            MiruaFilterType field_value = *(MiruaFilterType*) ((char*)config + map->offset);
+            printf("%s", mirua_filter_get_name(field_value));
+        } break;
+        case MIRUA_CONFIG_TYPE_PRINT_LEVEL: {
+            int field_value = *(int*) ((char*)config + map->offset);
+            printf("%d", field_value);
+        } break;
+        case MIRUA_CONFIG_TYPE_FILE_OUTPUT_PATH: {
+            char* field_value = *(char**) ((char*)config + map->offset);
+            printf("%s", field_value ? field_value : "(null)");
+        } break;
+        default:
+            printf("Unknown type");
+            break;
+    }
+}
+
 
 void mirua_config_set(MiruaConfig* config, const char* key, const char* value) {
     for (size_t i = 0; i < mirua_config_mapping_count; ++i) {
@@ -1365,6 +1507,10 @@ bool mirua_config_load_from_file(MiruaConfig* config, const char* filepath) {
                     has_errors = true;
                     continue;
                 }
+            } else if (strcmp(key, "default_path") == 0) {
+                mirua_config_set(config, "output_path", value);
+            } else {
+                log_warn("[CONFIG] - didnt find val \"%s\" in config", value);
             }
 
             // If all checks pass, set the config and mark key as set
@@ -1395,6 +1541,79 @@ bool mirua_config_load_from_file(MiruaConfig* config, const char* filepath) {
     }
     log_trace("[CONFIG] Successfully loaded from %s", filepath);
     return true;
+}
+void mirua_config_print_enabled_data_types(uint32_t mask) {
+    printf("Enabled Data Types (bitmask: 0x%08X):\n", mask);
+    if (mask == 0) {
+        printf("  All types (no filtering)\n");
+        return;
+    }
+
+    bool any_enabled = false;
+    for (size_t i = 0; i < UA_DATATYPEKINDS; ++i) {  // UA_DATATYPEKINDS = 31
+        if (mask & (1U << i)) {
+            const char* type_name = (i < UA_DATATYPEKINDS) ? UA_TYPES[i].typeName : "Unknown";
+            printf("  [%zu] %s\n", i, type_name);
+            any_enabled = true;
+        }
+    }
+    if (!any_enabled) {
+        printf("  None (all types disabled)\n");
+    }
+}
+void mirua_print_enabled_data_types(uint32_t mask) {
+    printf("Enabled Data Types (bitmask: 0x%08X):\n", mask);
+    if (mask == 0) {
+        printf("  All types (no filtering)\n");
+        return;
+    }
+
+    // List of UA_DataTypeKind names (based on open62541 enum, all 31 types)
+    const char* type_names[] = {
+        "BOOLEAN",           // 0
+        "SBYTE",             // 1
+        "BYTE",              // 2
+        "INT16",             // 3
+        "UINT16",            // 4
+        "INT32",             // 5
+        "UINT32",            // 6
+        "INT64",             // 7
+        "UINT64",            // 8
+        "FLOAT",             // 9
+        "DOUBLE",            // 10
+        "STRING",            // 11
+        "DATETIME",          // 12
+        "GUID",              // 13
+        "BYTESTRING",        // 14
+        "XMLELEMENT",        // 15
+        "NODEID",            // 16
+        "EXPANDEDNODEID",    // 17
+        "STATUSCODE",        // 18
+        "QUALIFIEDNAME",     // 19
+        "LOCALIZEDTEXT",     // 20
+        "EXTENSIONOBJECT",   // 21
+        "DATAVALUE",         // 22
+        "VARIANT",           // 23
+        "DIAGNOSTICINFO",    // 24
+        "DECIMAL",           // 25
+        "ENUM",              // 26
+        "STRUCTURE",         // 27
+        "OPTSTRUCT",         // 28
+        "UNION",             // 29
+        "BITFIELDCLUSTER"    // 30
+    };
+    const size_t num_types = sizeof(type_names) / sizeof(type_names[0]);
+
+    bool any_enabled = false;
+    for (size_t i = 0; i < num_types && i < 32; ++i) {
+        if (mask & (1U << i)) {
+            printf("  [%zu] %s\n", i, type_names[i]);
+            any_enabled = true;
+        }
+    }
+    if (!any_enabled) {
+        printf("  None (all types disabled)\n");
+    }
 }
 uint32_t mirua_parse_filters(const char* filters_str) {
     uint32_t mask = 0;
@@ -1767,6 +1986,7 @@ void mirua_nodeId_init(MiruaNodeId* nodeId) {
     if (!nodeId) return;
     UA_NodeId_init(&nodeId->nodeid);
     UA_QualifiedName_init(&nodeId->name);
+    nodeId->dataTypeKind = UA_DATATYPEKIND_BITFIELDCLUSTER;  
 }
 
 void mirua_nodeId_clear(MiruaNodeId* nodeId) {
@@ -1933,11 +2153,12 @@ size_t mirua_nodeId_to_string(char* buf, size_t bufsize, const MiruaNodeId* node
     written = snprintf(
         buf + written,
         bufsize - written,
-        "nodeId: %.*s name: %.*s",
+        "nodeId: %.*s name: %.*s typekind: %s",
         (int)str.length,
         str.data,
         (int)name.length,
-        name.data);
+        name.data,
+        UA_TYPES[nodeid->dataTypeKind].typeName);
 
     UA_String_clear(&str);
     return written;
@@ -1947,6 +2168,7 @@ void mirua_nodeId_copy(const MiruaNodeId* src, MiruaNodeId* dst) {
     if (!src || !dst) return;
     UA_NodeId_copy(&src->nodeid, &dst->nodeid);
     UA_QualifiedName_copy(&src->name, &dst->name);
+    dst->dataTypeKind = src->dataTypeKind;  
 }
 
 size_t mirua_value_to_string(char* buf, size_t bufsize, const MiruaValue* value, size_t indent) {
@@ -2037,3 +2259,4 @@ const char* mirua_node_type_to_string(MiruaNodeType type) {
         case MIRUA_NODE_VALUE: return "value";
     }
 }
+

@@ -10,6 +10,7 @@ typedef enum {
 typedef struct MiruaNodeId {
     UA_NodeId nodeid;
     UA_QualifiedName name;
+    UA_DataTypeKind dataTypeKind;
 } MiruaNodeId;
 
 typedef struct MiruaValue {

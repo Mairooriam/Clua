@@ -146,7 +146,15 @@ void interpreter_config_state_execute(Interpreter* interpreter, ASTNode* node) {
             mirua_print_current_children(interpreter->mirua_context);
         } break;
         case AST_LIST_DIRS: {
-            mirua_config_print_ctx(interpreter->mirua_context);
+            log_trace("[INTERPRETER] - LIST DIRS (CONFIG)");
+            int idx = node->data.list_dirs.idx;
+
+            // In config state, only show config based on idx (no node exploration)
+            if (idx != -1) {
+                mirua_config_print_by_idx(interpreter->mirua_context, idx);
+            } else {
+                mirua_config_print_ctx(interpreter->mirua_context);
+            }
         } break;
         case AST_NODE_SET: {
             if (node->child_count < 2) {

@@ -32,6 +32,7 @@ set(SOURCES
     modules/mirua_module.c
     modules/mirua_to_string.c
     modules/mirua_serialization.c
+    modules/file/file_windows.c
     src/debug_buf.c
     src/utils.c
 )

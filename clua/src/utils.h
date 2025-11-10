@@ -4,11 +4,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-char* mir_utils_getCurrentDirectory(void);
 
-int mir_utils_countLines(FILE* file);
-
-bool mir_utils_fileExistsInDirectory(const char* path, const char* filename);
+int safe_snprintf(char* buf, size_t* offset, size_t bufsize, const char* format, ...);
 
 #endif  // UTILS_H
 

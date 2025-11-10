@@ -34,6 +34,8 @@ typedef struct MiruaConfig {
     uint32_t selectedDataTypeKinds;  // maps to UA_DATATYPEKIND s. mask
     MiruaFilterType filterType;
     int printLevel;
+    char* output_path;
+    
 } MiruaConfig;
 
 // MAIN CONTEXT
@@ -116,6 +118,7 @@ typedef enum {
     MIRUA_CONFIG_TYPE_FILTER,
     MIRUA_CONFIG_TYPE_FILTER_FUNC,
     MIRUA_CONFIG_TYPE_PRINT_LEVEL,
+    MIRUA_CONFIG_TYPE_FILE_OUTPUT_PATH,
     MIRUA_CONFIG_COUNT,
 } MiruaConfigType;
 
@@ -126,8 +129,11 @@ typedef struct {
 } MiruaConfigMapping;
 void mirua_config_set_ctx(MiruaContext* ctx, const char* key, const char* value);
 void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value);
+void mirua_config_print_field(const MiruaConfig* config, const MiruaConfigMapping* map, bool detailed);
+void mirua_config_print_by_idx(MiruaContext* ctx, size_t idx);
 void mirua_config_print(const MiruaConfig* config);
 bool mirua_config_load_from_file(MiruaConfig* config, const char* filepath);
+void mirua_config_print_enabled_data_types(uint32_t mask);
 uint32_t mirua_parse_filters(const char* filters_str);
 extern const MiruaConfigMapping configMapping[];
 extern const size_t mirua_config_mapping_count;
