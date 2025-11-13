@@ -7,8 +7,10 @@
 #include "interpreter.h"
 #include "lexer.h"
 #include "mirua_module.h"
-#include "parser.h"
+#include "mirua_types_internal.h"
 #include "modules/file/file_module.h"
+#include "open62541/types.h"
+#include "parser.h"
 #define MAX_INPUT_SIZE 1024
 const char* CONFIG_PATH = "\\config";
 const char* CONFIG_FILENAME = "config.mir";
@@ -89,20 +91,30 @@ int main(int argc, char* argv[]) {
         // mirua_config_set_by_idx(config, 3, "ALL");
         // mirua_config_print_ctx(ctx);
         // mirua_config_print_ctx(ctx);
-        mirua_config_load_from_file(&ctx->config, "config.mir");
-        mirua_config_print_ctx(ctx);
-        mirua_state_change(ctx, MIRUA_STATE_NORMAL);
+        // mirua_config_load_from_file(&ctx->config, "config.mir");
+        // mirua_config_print_ctx(ctx);
+        // mirua_state_change(ctx, MIRUA_STATE_NORMAL);
         mirua_connect(ctx, "opc.tcp://127.0.0.1:4840");
-        mirua_explore_children(ctx, &ctx->currentChildren, &ctx->currentNode.nodeid);
-        mirua_print_current_node(ctx);
-        mirua_print_current_children(ctx);
-
+        // mirua_explore_children(ctx, &ctx->currentChildren, &ctx->currentNode.nodeid);
+        // mirua_print_current_node(ctx);
+        // mirua_print_current_children(ctx);
+        //
         // UA_String str = UA_String_fromChars("ns=5;s=::Program1:mouse_advv");
-        UA_String str = UA_String_fromChars("ns=5;i=100010");
+        UA_String str = UA_String_fromChars("ns=5;s=::Program1:Mir_array");
 
         UA_NodeId node;
-        UA_NodeId_parse(&node, str);
-        mirua_explore_value(ctx, &node);
+        UA_StatusCode status = UA_NodeId_parse(&node, str);
+        // mirua_explore_value(ctx, &node);
+        if (mirua_nodeId_is_structure(ctx, node)) {
+            printf("NODE IS STRUCTURE!");
+            MiruaTreeNode* treeNode = mirua_tree_node_create(ctx->client, &node);
+            MiruaTree* tree = mirua_tree_create(treeNode);
+            mirua_build_structure_tree(ctx, tree, tree->root, &node);
+            char buf[1024 * 8];
+            size_t bufsize = sizeof(buf);
+            mirua_tree_to_string(buf, bufsize, tree);
+            log_trace("%s", buf);
+        }
 
         mirua_module_free(ctx);
         return 0;

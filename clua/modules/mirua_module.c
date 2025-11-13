@@ -1,6 +1,7 @@
 #include "mirua_module.h"
 
 #include <assert.h>
+#include <minwindef.h>
 #include <open62541/client.h>
 #include <open62541/client_config_default.h>
 #include <open62541/client_highlevel.h>
@@ -206,9 +207,10 @@ void mirua_execute(MiruaContext* ctx, ASTNode* node) {
     // }
 }
 void mirua_save(MiruaContext* ctx, int start, int end) {
-    // GETTING RANGE OF NODES 
+    // GETTING RANGE OF NODES
     mirua_t_NodeList subset;
-    size_t range_size = (end >= start && (size_t)end < ctx->currentChildren.size) ? (size_t)(end - start + 1) : 0;
+    size_t range_size =
+        (end >= start && (size_t)end < ctx->currentChildren.size) ? (size_t)(end - start + 1) : 0;
     mirua_init_nodeList(&subset, range_size);
 
     for (size_t i = (size_t)start; i <= (size_t)end && i < ctx->currentChildren.size; i++) {
@@ -224,10 +226,10 @@ void mirua_save(MiruaContext* ctx, int start, int end) {
             subset.capacity = new_cap;
         }
         mirua_nodeId_init(&subset.nodeIds[subset.size]);
+
         mirua_nodeId_copy(&ctx->currentChildren.nodeIds[i], &subset.nodeIds[subset.size]);
         subset.size++;
     }
-
 
     // FILE HANDLING
     const char* filename = ctx->config.output_path ? ctx->config.output_path : "output_file.txt";
@@ -263,19 +265,28 @@ void mirua_save(MiruaContext* ctx, int start, int end) {
 
     FILE* f = fopen(filename, mode);
     if (!f) {
-        log_error("[SAVE] Failed to open file '%s' for %s", filename, mode[0] == 'a' ? "appending" : "writing");
+        log_error(
+            "[SAVE] Failed to open file '%s' for %s",
+            filename,
+            mode[0] == 'a' ? "appending" : "writing");
         if (filename_allocated) free((char*)filename);
         mirua_free_nodeList(&subset);
         return;
     }
 
     // SERIALIZING
-    log_trace("[SAVE] Serializing children from %d to %d to '%s' (%s)", start, end - 1, filename, mode[0] == 'a' ? "appending" : "overwriting");
+    log_trace(
+        "[SAVE] Serializing children from %d to %d to '%s' (%s)",
+        start,
+        end - 1,
+        filename,
+        mode[0] == 'a' ? "appending" : "overwriting");
     MiruaNodeSerializer* serializer = mirua_serializer_get(SERIALIZER_TELEGRF);
     if (serializer->serialize_nodes_to_file(&subset, f) == SIZE_MAX) {
         log_error("[SAVE] Serialization failed or buffer overflow");
     } else {
-        log_trace("[SAVE] Successfully %s to '%s'", mode[0] == 'a' ? "appended" : "saved", filename);
+        log_trace(
+            "[SAVE] Successfully %s to '%s'", mode[0] == 'a' ? "appended" : "saved", filename);
     }
 
     fclose(f);
@@ -490,10 +501,23 @@ void mirua_explore_children(MiruaContext* ctx, mirua_t_NodeList* nodes, const UA
     if (bResp.resultsSize > 0) {
         for (size_t i = 0; i < bResp.results[0].referencesSize; ++i) {
             UA_ReferenceDescription* ref = &bResp.results[0].references[i];
-
             MiruaNodeFilter filter = mirua_filter_get_func(ctx->config.filterType);
             if (filter && !filter(ref->nodeId.nodeId, ref->referenceTypeId, ctx->client, ctx)) {
                 continue;
+            }
+
+            if (mirua_nodeId_is_structure(ctx, ref->nodeId.nodeId)) {
+                // Browse until you find value nodes of struct.
+                // TODO: add way to save the "value" nodes from the tree
+                MiruaTreeNode* root = mirua_tree_node_create(ctx->client, &ref->nodeId.nodeId);
+                MiruaTree* tree = mirua_tree_create(root);
+                mirua_build_structure_tree(ctx, tree, tree->root, &ref->nodeId.nodeId);
+                // mirua_tree_collect_values to nodelist -> serializer uses them.
+                size_t bufsize = 1024 * 10000;
+                char* buf = malloc(bufsize);
+                // TODO: fix this leak (freeing of tree, malloc failing etc.)
+                mirua_tree_to_string(buf, bufsize, tree);
+                log_trace("%s\n", buf);
             }
 
             if (nodes->size >= nodes->capacity) {
@@ -1266,7 +1290,6 @@ void mirua_config_print(const MiruaConfig* config) {
     }
 }
 
-
 void mirua_config_print_ctx(MiruaContext* ctx) {
     mirua_config_print(&ctx->config);
 }
@@ -1344,10 +1367,11 @@ void mirua_config_print_by_idx(MiruaContext* ctx, size_t idx) {
     mirua_config_print_field(&ctx->config, map, true);
     printf("\n");
 }
-void mirua_config_print_field(const MiruaConfig* config, const MiruaConfigMapping* map, bool detailed) {
+void mirua_config_print_field(
+    const MiruaConfig* config, const MiruaConfigMapping* map, bool detailed) {
     switch (map->type) {
         case MIRUA_CONFIG_TYPE_STRING: {
-            char* field_value = *(char**) ((char*)config + map->offset);
+            char* field_value = *(char**)((char*)config + map->offset);
             printf("%s", field_value ? field_value : "(null)");
         } break;
         case MIRUA_CONFIG_TYPE_NODEID: {
@@ -1359,7 +1383,7 @@ void mirua_config_print_field(const MiruaConfig* config, const MiruaConfigMappin
             UA_String_clear(&str);
         } break;
         case MIRUA_CONFIG_TYPE_FILTER: {
-            uint32_t field_value = *(uint32_t*) ((char*)config + map->offset);
+            uint32_t field_value = *(uint32_t*)((char*)config + map->offset);
             printf("0x%08X ", field_value);
             if (detailed) {
                 printf("Binary: ");
@@ -1374,23 +1398,20 @@ void mirua_config_print_field(const MiruaConfig* config, const MiruaConfigMappin
             }
         } break;
         case MIRUA_CONFIG_TYPE_FILTER_FUNC: {
-            MiruaFilterType field_value = *(MiruaFilterType*) ((char*)config + map->offset);
+            MiruaFilterType field_value = *(MiruaFilterType*)((char*)config + map->offset);
             printf("%s", mirua_filter_get_name(field_value));
         } break;
         case MIRUA_CONFIG_TYPE_PRINT_LEVEL: {
-            int field_value = *(int*) ((char*)config + map->offset);
+            int field_value = *(int*)((char*)config + map->offset);
             printf("%d", field_value);
         } break;
         case MIRUA_CONFIG_TYPE_FILE_OUTPUT_PATH: {
-            char* field_value = *(char**) ((char*)config + map->offset);
+            char* field_value = *(char**)((char*)config + map->offset);
             printf("%s", field_value ? field_value : "(null)");
         } break;
-        default:
-            printf("Unknown type");
-            break;
+        default: printf("Unknown type"); break;
     }
 }
-
 
 void mirua_config_set(MiruaConfig* config, const char* key, const char* value) {
     for (size_t i = 0; i < mirua_config_mapping_count; ++i) {
@@ -1570,37 +1591,37 @@ void mirua_print_enabled_data_types(uint32_t mask) {
 
     // List of UA_DataTypeKind names (based on open62541 enum, all 31 types)
     const char* type_names[] = {
-        "BOOLEAN",           // 0
-        "SBYTE",             // 1
-        "BYTE",              // 2
-        "INT16",             // 3
-        "UINT16",            // 4
-        "INT32",             // 5
-        "UINT32",            // 6
-        "INT64",             // 7
-        "UINT64",            // 8
-        "FLOAT",             // 9
-        "DOUBLE",            // 10
-        "STRING",            // 11
-        "DATETIME",          // 12
-        "GUID",              // 13
-        "BYTESTRING",        // 14
-        "XMLELEMENT",        // 15
-        "NODEID",            // 16
-        "EXPANDEDNODEID",    // 17
-        "STATUSCODE",        // 18
-        "QUALIFIEDNAME",     // 19
-        "LOCALIZEDTEXT",     // 20
-        "EXTENSIONOBJECT",   // 21
-        "DATAVALUE",         // 22
-        "VARIANT",           // 23
-        "DIAGNOSTICINFO",    // 24
-        "DECIMAL",           // 25
-        "ENUM",              // 26
-        "STRUCTURE",         // 27
-        "OPTSTRUCT",         // 28
-        "UNION",             // 29
-        "BITFIELDCLUSTER"    // 30
+        "BOOLEAN",          // 0
+        "SBYTE",            // 1
+        "BYTE",             // 2
+        "INT16",            // 3
+        "UINT16",           // 4
+        "INT32",            // 5
+        "UINT32",           // 6
+        "INT64",            // 7
+        "UINT64",           // 8
+        "FLOAT",            // 9
+        "DOUBLE",           // 10
+        "STRING",           // 11
+        "DATETIME",         // 12
+        "GUID",             // 13
+        "BYTESTRING",       // 14
+        "XMLELEMENT",       // 15
+        "NODEID",           // 16
+        "EXPANDEDNODEID",   // 17
+        "STATUSCODE",       // 18
+        "QUALIFIEDNAME",    // 19
+        "LOCALIZEDTEXT",    // 20
+        "EXTENSIONOBJECT",  // 21
+        "DATAVALUE",        // 22
+        "VARIANT",          // 23
+        "DIAGNOSTICINFO",   // 24
+        "DECIMAL",          // 25
+        "ENUM",             // 26
+        "STRUCTURE",        // 27
+        "OPTSTRUCT",        // 28
+        "UNION",            // 29
+        "BITFIELDCLUSTER"   // 30
     };
     const size_t num_types = sizeof(type_names) / sizeof(type_names[0]);
 
@@ -1790,7 +1811,7 @@ void mirua_explore_value(MiruaContext* ctx, const UA_NodeId* nodeId) {
     UA_NodeId_copy(&node, &mirNodeId.nodeid);        // Copy the parsed nodeId
     UA_QualifiedName_copy(&name2, &mirNodeId.name);  // Copy the browse name
 
-    MiruaTreeNode* root = mirua_tree_node_create(&mirNodeId, &val, &out);
+    MiruaTreeNode* root = _mirua_tree_node_create(&mirNodeId, &val, &out);
     MiruaTree* tree = mirua_tree_create(root);
 
     size_t bufsize = 20000;
@@ -1835,7 +1856,6 @@ void mirua_explore_value(MiruaContext* ctx, const UA_NodeId* nodeId) {
 
     UA_String json;
     UA_String_init(&json);
-
     if (var.type == &UA_TYPES[UA_TYPES_EXTENSIONOBJECT]) {
         UA_ExtensionObject* eo = (UA_ExtensionObject*)var.data;
         if (eo->encoding == UA_EXTENSIONOBJECT_DECODED && eo->content.decoded.type) {
@@ -1930,7 +1950,7 @@ size_t mirua_tree_count_nodes(const MiruaTree* tree) {
     return mirua_tree_node_count_nodes(tree->root);
 }
 
-MiruaTreeNode* mirua_tree_node_create(
+MiruaTreeNode* _mirua_tree_node_create(
     const MiruaNodeId* nodeId, const MiruaValue* value, const UA_NodeId* type) {
     MiruaTreeNode* node = malloc(sizeof(MiruaTreeNode));
     if (!node) {
@@ -1981,12 +2001,41 @@ MiruaTreeNode* mirua_tree_node_create(
     log_trace("[TREE] Created MiruaTreeNode");
     return node;
 }
+MiruaTreeNode* mirua_tree_node_create(UA_Client* client, const UA_NodeId* node) {
+    if (!client || !node) return NULL;
 
+    MiruaNodeId* nodeid = mirua_nodeId_create(client, node);
+    if (!nodeid) return NULL;
+
+    MiruaValue* value = mirua_value_create(client, node);
+    if (!value) {
+        mirua_nodeId_destroy(nodeid);
+        return NULL;
+    }
+
+    // Read the data type for 'type' parameter
+    UA_NodeId dataType;
+    UA_NodeId_init(&dataType);
+    UA_StatusCode status = UA_Client_readDataTypeAttribute(client, *node, &dataType);
+    if (status != UA_STATUSCODE_GOOD) {
+        mirua_nodeId_destroy(nodeid);
+        mirua_value_destroy(value);
+        UA_NodeId_clear(&dataType);
+        return NULL;
+    }
+
+    MiruaTreeNode* treeNode = _mirua_tree_node_create(nodeid, value, &dataType);
+
+    // TODO: wasteful copy?
+    mirua_nodeId_destroy(nodeid);
+    mirua_value_destroy(value);
+    UA_NodeId_clear(&dataType);
+    return treeNode;
+}
 void mirua_nodeId_init(MiruaNodeId* nodeId) {
     if (!nodeId) return;
     UA_NodeId_init(&nodeId->nodeid);
     UA_QualifiedName_init(&nodeId->name);
-    nodeId->dataTypeKind = UA_DATATYPEKIND_BITFIELDCLUSTER;  
 }
 
 void mirua_nodeId_clear(MiruaNodeId* nodeId) {
@@ -1995,7 +2044,7 @@ void mirua_nodeId_clear(MiruaNodeId* nodeId) {
     UA_QualifiedName_clear(&nodeId->name);
 }
 
-MiruaNodeId* mirua_nodeId_create(const UA_NodeId* nodeId, const UA_QualifiedName* name) {
+MiruaNodeId* _mirua_nodeId_create(const UA_NodeId* nodeId, const UA_QualifiedName* name) {
     MiruaNodeId* newNodeId = malloc(sizeof(MiruaNodeId));
     if (!newNodeId) {
         log_error("[NODEID] Failed to allocate MiruaNodeId");
@@ -2008,6 +2057,20 @@ MiruaNodeId* mirua_nodeId_create(const UA_NodeId* nodeId, const UA_QualifiedName
 
     log_trace("[NODEID] Created MiruaNodeId");
     return newNodeId;
+}
+MiruaNodeId* mirua_nodeId_create(UA_Client* client, const UA_NodeId* nodeId) {
+    UA_QualifiedName browseName;
+    UA_QualifiedName_init(&browseName);
+    UA_StatusCode status = UA_Client_readBrowseNameAttribute(client, *nodeId, &browseName);
+    if (status != UA_STATUSCODE_GOOD) {
+        log_warn("[NODEID CREATE] Failed to read browse name for node");
+        UA_QualifiedName_clear(&browseName);
+        return NULL;
+    }
+    MiruaNodeId* node = _mirua_nodeId_create(nodeId, &browseName);
+    UA_QualifiedName_clear(&browseName);
+    // TODO: add typekidn on create
+    return node;
 }
 
 void mirua_nodeId_destroy(MiruaNodeId* nodeId) {
@@ -2030,7 +2093,7 @@ void mirua_value_clear(MiruaValue* value) {
     mirua_nodeId_clear(&value->type);
 }
 
-MiruaValue* mirua_value_create(const UA_Variant* value, const MiruaNodeId* type) {
+MiruaValue* _mirua_value_create(const UA_Variant* value, const MiruaNodeId* type) {
     MiruaValue* newValue = malloc(sizeof(MiruaValue));
     if (!newValue) {
         log_error("[VALUE] Failed to allocate MiruaValue");
@@ -2047,6 +2110,38 @@ MiruaValue* mirua_value_create(const UA_Variant* value, const MiruaNodeId* type)
     log_trace("[VALUE] Created MiruaValue");
     return newValue;
 }
+MiruaValue* mirua_value_create(UA_Client* client, const UA_NodeId* nodeId) {
+    UA_Variant var;
+    UA_Variant_init(&var);
+    UA_StatusCode status = UA_Client_readValueAttribute(client, *nodeId, &var);
+    if (status != UA_STATUSCODE_GOOD) {
+        log_warn("[VALUE CREATE] Failed to read value for node");
+        UA_Variant_clear(&var);
+        return NULL;
+    }
+
+    UA_NodeId dataType;
+    UA_NodeId_init(&dataType);
+    status = UA_Client_readDataTypeAttribute(client, *nodeId, &dataType);
+    if (status != UA_STATUSCODE_GOOD) {
+        log_warn("[VALUE CREATE] Failed to read data type for node");
+        UA_Variant_clear(&var);
+        UA_NodeId_clear(&dataType);
+        return NULL;
+    }
+
+    // Create type MiruaNodeId (for datatpye of the value)
+    MiruaNodeId typeNodeId;
+    mirua_nodeId_init(&typeNodeId);
+    UA_NodeId_copy(&dataType, &typeNodeId.nodeid);
+
+    MiruaValue* val = _mirua_value_create(&var, &typeNodeId);
+
+    UA_Variant_clear(&var);
+    UA_NodeId_clear(&dataType);
+    mirua_nodeId_clear(&typeNodeId);
+    return val;
+}
 
 void mirua_value_destroy(MiruaValue* value) {
     if (!value) return;
@@ -2055,10 +2150,107 @@ void mirua_value_destroy(MiruaValue* value) {
     log_trace("[VALUE] Destroyed MiruaValue");
 }
 
+// TODO: delete this / rwork straight from AI
+static void mirua_build_array_elements_tree(
+    MiruaContext* ctx, MiruaTree* tree, MiruaTreeNode* parent, const UA_Variant* arrayVar) {
+    if (!arrayVar->data || arrayVar->arrayLength == 0) return;
+
+    // Check if array elements are structures (ExtensionObjects)
+    if (arrayVar->type == &UA_TYPES[UA_TYPES_EXTENSIONOBJECT]) {
+        UA_ExtensionObject* extensionArray = (UA_ExtensionObject*)arrayVar->data;
+
+        for (size_t i = 0; i < arrayVar->arrayLength; ++i) {
+            UA_ExtensionObject* eo = &extensionArray[i];
+
+            if (eo->encoding == UA_EXTENSIONOBJECT_DECODED && eo->content.decoded.type) {
+                // Create a child node for this array element
+                MiruaNodeId arrayElementNodeId;
+                mirua_nodeId_init(&arrayElementNodeId);
+
+                // Create a synthetic NodeId for the array element
+                char elementName[64];
+                snprintf(elementName, sizeof(elementName), "[%zu]", i);
+                UA_String elementNameStr = UA_String_fromChars(elementName);
+                arrayElementNodeId.name.name = elementNameStr;
+
+                // Create value for the array element
+                MiruaValue elementValue;
+                mirua_value_init(&elementValue);
+
+                // Wrap the decoded data back into a variant
+                UA_Variant elementVar;
+                UA_Variant_init(&elementVar);
+                UA_Variant_setScalar(
+                    &elementVar, eo->content.decoded.data, eo->content.decoded.type);
+                UA_Variant_copy(&elementVar, &elementValue.value);
+
+                // Get the data type NodeId from the extension object type
+                UA_NodeId elementDataType = eo->content.decoded.type->typeId;
+                UA_NodeId_copy(&elementDataType, &elementValue.type.nodeid);
+
+                MiruaTreeNode* elementChild =
+                    _mirua_tree_node_create(&arrayElementNodeId, &elementValue, &elementDataType);
+                if (elementChild) {
+                    elementChild->nodeType = MIRUA_NODE_STRUCTURE;
+                    mirua_tree_add_child(tree, parent, elementChild);
+
+                    // Recursively build the structure for this array element
+                    mirua_build_structure_tree(ctx, tree, elementChild, &elementDataType);
+                }
+
+                mirua_nodeId_clear(&arrayElementNodeId);
+                mirua_value_clear(&elementValue);
+                UA_String_clear(&elementNameStr);
+            }
+        }
+    } else {
+        // Handle arrays of primitive types
+        for (size_t i = 0; i < arrayVar->arrayLength; ++i) {
+            MiruaNodeId arrayElementNodeId;
+            mirua_nodeId_init(&arrayElementNodeId);
+
+            char elementName[64];
+            snprintf(elementName, sizeof(elementName), "[%zu]", i);
+            UA_String elementNameStr = UA_String_fromChars(elementName);
+            arrayElementNodeId.name.name = elementNameStr;
+
+            MiruaValue elementValue;
+            mirua_value_init(&elementValue);
+
+            // Create a scalar variant for this array element
+            UA_Variant elementVar;
+            UA_Variant_init(&elementVar);
+            void* elementData = (char*)arrayVar->data + (i * arrayVar->type->memSize);
+            UA_Variant_setScalar(&elementVar, elementData, arrayVar->type);
+            UA_Variant_copy(&elementVar, &elementValue.value);
+
+            UA_NodeId elementDataType = arrayVar->type->typeId;
+            UA_NodeId_copy(&elementDataType, &elementValue.type.nodeid);
+
+            MiruaTreeNode* elementChild =
+                _mirua_tree_node_create(&arrayElementNodeId, &elementValue, &elementDataType);
+            if (elementChild) {
+                elementChild->nodeType = MIRUA_NODE_VALUE;
+                mirua_tree_add_child(tree, parent, elementChild);
+            }
+
+            mirua_nodeId_clear(&arrayElementNodeId);
+            mirua_value_clear(&elementValue);
+            // UA_String_clear(&elementNameStr); //TODO: fix if leak
+        }
+    }
+}
+
 // Recursive function to build the structure tree by exploring HasComponent references
 void mirua_build_structure_tree(
     MiruaContext* ctx, MiruaTree* tree, MiruaTreeNode* parent, const UA_NodeId* dataTypeId) {
-    // Browse HasComponent references of the data type node
+    // Check if this node has an array value and handle it
+    if (parent->value.value.arrayLength > 0) {
+        mirua_build_array_elements_tree(ctx, tree, parent, &parent->value.value);
+        // Not returning here because arrays can be filled with structs
+    }
+
+    // Browse HasComponent references of the data type node (structures have hascomponents)
     UA_BrowseRequest bReq;
     UA_BrowseRequest_init(&bReq);
     bReq.nodesToBrowseSize = 1;
@@ -2077,58 +2269,55 @@ void mirua_build_structure_tree(
         for (size_t i = 0; i < bResp.results[0].referencesSize; ++i) {
             UA_ReferenceDescription* ref = &bResp.results[0].references[i];
 
-            // Create a child node for this field
+            // CHILD - field
             MiruaNodeId fieldNodeId;
             mirua_nodeId_init(&fieldNodeId);
             UA_NodeId_copy(&ref->nodeId.nodeId, &fieldNodeId.nodeid);
             UA_QualifiedName_copy(&ref->browseName, &fieldNodeId.name);
 
-            // Read the field's data type
+            // CHILD - field datatype
             UA_NodeId fieldDataType;
             UA_NodeId_init(&fieldDataType);
             UA_Client_readDataTypeAttribute(ctx->client, ref->nodeId.nodeId, &fieldDataType);
 
-            // Read the field's value to check its data type
+            // CHILD - field value
             UA_Variant fieldValueVariant;
             UA_Variant_init(&fieldValueVariant);
             UA_StatusCode valueStatus =
                 UA_Client_readValueAttribute(ctx->client, ref->nodeId.nodeId, &fieldValueVariant);
 
-            // Create a MiruaValue for the field
+            // CHILD - field construction
             MiruaValue fieldValue;
             mirua_value_init(&fieldValue);
-            UA_NodeId_copy(&fieldDataType, &fieldValue.type.nodeid);  // Copy data type NodeId
+            UA_NodeId_copy(&fieldDataType, &fieldValue.type.nodeid);
             if (valueStatus == UA_STATUSCODE_GOOD) {
                 UA_Variant_copy(&fieldValueVariant, &fieldValue.value);
             }
 
             MiruaTreeNode* child =
-                mirua_tree_node_create(&fieldNodeId, &fieldValue, &fieldDataType);
+                _mirua_tree_node_create(&fieldNodeId, &fieldValue, &fieldDataType);
             if (child) {
+                if (fieldValueVariant.arrayLength > 0) {
+                    // This is an array - could contain structures or primitives
+                    // TODO: add enum for arrays?
+                    child->nodeType = MIRUA_NODE_STRUCTURE;
+                } else if (fieldValueVariant.type == &UA_TYPES[UA_TYPES_EXTENSIONOBJECT]) {
+                    child->nodeType = MIRUA_NODE_STRUCTURE;
+                } else {
+                    child->nodeType = MIRUA_NODE_VALUE;
+                }
+
                 mirua_tree_add_child(tree, parent, child);
 
-                // If the field's data type is another structure, recurse
-                UA_QualifiedName fieldTypeName;
-                UA_QualifiedName_init(&fieldTypeName);
-                UA_Client_readBrowseNameAttribute(ctx->client, ref->nodeId.nodeId, &fieldTypeName);
+                // Recurse down for childs.
 
-                UA_QualifiedName fieldTypeName2;
-                UA_QualifiedName_init(&fieldTypeName2);
-                UA_Client_readBrowseNameAttribute(
-                    ctx->client, fieldValueVariant.type->typeId, &fieldTypeName2);
-
-                const char* target = "Structure";
-                size_t targetLen = strlen(target);
-                if (fieldTypeName2.name.length == targetLen &&
-                    memcmp(fieldTypeName2.name.data, target, targetLen) == 0) {
-                    mirua_build_structure_tree(ctx, tree, child, &ref->nodeId.nodeId);
-                }
-                UA_QualifiedName_clear(&fieldTypeName);
+                mirua_build_structure_tree(ctx, tree, child, &ref->nodeId.nodeId);
             }
 
             mirua_nodeId_clear(&fieldNodeId);
             mirua_value_clear(&fieldValue);
             UA_NodeId_clear(&fieldDataType);
+            UA_Variant_clear(&fieldValueVariant);
         }
     }
 
@@ -2153,12 +2342,11 @@ size_t mirua_nodeId_to_string(char* buf, size_t bufsize, const MiruaNodeId* node
     written = snprintf(
         buf + written,
         bufsize - written,
-        "nodeId: %.*s name: %.*s typekind: %s",
+        "nodeId: %.*s name: %.*s",
         (int)str.length,
         str.data,
         (int)name.length,
-        name.data,
-        UA_TYPES[nodeid->dataTypeKind].typeName);
+        name.data);
 
     UA_String_clear(&str);
     return written;
@@ -2168,9 +2356,20 @@ void mirua_nodeId_copy(const MiruaNodeId* src, MiruaNodeId* dst) {
     if (!src || !dst) return;
     UA_NodeId_copy(&src->nodeid, &dst->nodeid);
     UA_QualifiedName_copy(&src->name, &dst->name);
-    dst->dataTypeKind = src->dataTypeKind;  
 }
+bool mirua_nodeId_is_structure(MiruaContext* ctx, const UA_NodeId node) {
+    UA_Variant var;
+    UA_Variant_init(&var);
+    UA_StatusCode status = UA_Client_readValueAttribute(ctx->client, node, &var);
 
+    bool is_structure = false;
+    if (status == UA_STATUSCODE_GOOD && var.type == &UA_TYPES[UA_TYPES_EXTENSIONOBJECT]) {
+        is_structure = true;
+    }
+
+    UA_Variant_clear(&var);
+    return is_structure;
+}
 size_t mirua_value_to_string(char* buf, size_t bufsize, const MiruaValue* value, size_t indent) {
     if (!buf || bufsize == 0 || !value) return 0;
     size_t written = 0;
@@ -2180,32 +2379,53 @@ size_t mirua_value_to_string(char* buf, size_t bufsize, const MiruaValue* value,
         written += snprintf(buf + written, bufsize - written, "  ");
     }
 
-    UA_String str;
-    UA_String_init(&str);
-    UA_EncodeJsonOptions options;
-    memset(&options, 0, sizeof(options));
-    options.prettyPrint = false;   // Human-readable formatting
-    options.unquotedKeys = false;  // Standard JSON keys
-    options.useReversible = true;  // For round-trip encoding/decoding
-    options.stringNodeIds = true;  // NodeIds as strings
+    // VALUE PRINTING
+    if (value->value.type == &UA_TYPES[UA_TYPES_EXTENSIONOBJECT]) {
+        written += snprintf(buf + written, bufsize - written, "<Structure>");
+    } else if (value->value.arrayLength > 0) {
+        written +=
+            snprintf(buf + written, bufsize - written, "<Array[%zu]>", value->value.arrayLength);
+    } else {
+        // PRIMITIVE TYPES
+        UA_String str;
+        UA_String_init(&str);
+        UA_EncodeJsonOptions options;
+        memset(&options, 0, sizeof(options));
+        options.prettyPrint = false;
+        options.unquotedKeys = false;
+        options.useReversible = true;
+        options.stringNodeIds = true;
 
-    UA_StatusCode status = UA_encodeJson(value->value.data, value->value.type, &str, &options);
-    if (status != UA_STATUSCODE_GOOD) {
-        printf("Failed to encode Variant to JSON: %s\n", UA_StatusCode_name(status));
+        UA_StatusCode status = UA_encodeJson(value->value.data, value->value.type, &str, &options);
+        if (status != UA_STATUSCODE_GOOD) {
+            written += snprintf(buf + written, bufsize - written, "<encoding failed>");
+        } else {
+            written +=
+                snprintf(buf + written, bufsize - written, "%.*s", (int)str.length, str.data);
+        }
+        UA_String_clear(&str);
     }
 
-    written += snprintf(buf + written, bufsize - written, "[VALUE:VALUE] - ");
-    written += snprintf(buf + written, bufsize - written, "%.*s", (int)str.length, str.data);
-
-    written += snprintf(buf + written, bufsize - written, "[VALUE:TYPE] - ");
-    written += mirua_nodeId_to_string(buf + written, bufsize - written, &value->type, indent);
-
-    UA_String_clear(&str);
+    // TYPE PRINTING
+    written += snprintf(buf + written, bufsize - written, " [VALUE:TYPE] - ");
+    if (value->type.name.name.length > 0) {
+        // Browse name if available.
+        written += snprintf(
+            buf + written,
+            bufsize - written,
+            "%.*s",
+            (int)value->type.name.name.length,
+            value->type.name.name.data);
+    } else if (value->value.type && value->value.type->typeName) {
+        // Fall back to the built-in type name
+        written += snprintf(buf + written, bufsize - written, "%s", value->value.type->typeName);
+    } else {
+        written += snprintf(buf + written, bufsize - written, "Unknown");
+    }
 
     if (written >= bufsize) {
         assert(0 && "Buffer truncation in mirua_value_to_string - increase bufsize");
     }
-
     return written;
 }
 
@@ -2259,4 +2479,3 @@ const char* mirua_node_type_to_string(MiruaNodeType type) {
         case MIRUA_NODE_VALUE: return "value";
     }
 }
-

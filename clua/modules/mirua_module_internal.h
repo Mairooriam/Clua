@@ -35,7 +35,7 @@ typedef struct MiruaConfig {
     MiruaFilterType filterType;
     int printLevel;
     char* output_path;
-    
+
 } MiruaConfig;
 
 // MAIN CONTEXT
@@ -129,7 +129,8 @@ typedef struct {
 } MiruaConfigMapping;
 void mirua_config_set_ctx(MiruaContext* ctx, const char* key, const char* value);
 void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value);
-void mirua_config_print_field(const MiruaConfig* config, const MiruaConfigMapping* map, bool detailed);
+void mirua_config_print_field(
+    const MiruaConfig* config, const MiruaConfigMapping* map, bool detailed);
 void mirua_config_print_by_idx(MiruaContext* ctx, size_t idx);
 void mirua_config_print(const MiruaConfig* config);
 bool mirua_config_load_from_file(MiruaConfig* config, const char* filepath);
@@ -152,22 +153,26 @@ void mirua_tree_destroy(MiruaTree* tree);
 void mirua_tree_add_child(MiruaTree* tree, MiruaTreeNode* parent, MiruaTreeNode* child);
 void mirua_tree_node_destroy(MiruaTreeNode* node);
 size_t mirua_tree_count_nodes(const MiruaTree* tree);
-MiruaTreeNode* mirua_tree_node_create(
+MiruaTreeNode* _mirua_tree_node_create(
     const MiruaNodeId* nodeId, const MiruaValue* value, const UA_NodeId* type);
+MiruaTreeNode* mirua_tree_node_create(UA_Client* client, const UA_NodeId* node);
 void mirua_build_structure_tree(
     MiruaContext* ctx, MiruaTree* tree, MiruaTreeNode* parent, const UA_NodeId* dataTypeId);
 
 // MiruaNodeId functions
 void mirua_nodeId_init(MiruaNodeId* nodeId);
 void mirua_nodeId_clear(MiruaNodeId* nodeId);
-MiruaNodeId* mirua_nodeId_create(const UA_NodeId* nodeId, const UA_QualifiedName* name);
+MiruaNodeId* _mirua_nodeId_create(const UA_NodeId* nodeId, const UA_QualifiedName* name);
+MiruaNodeId* mirua_nodeId_create(UA_Client* client, const UA_NodeId* nodeId);
 void mirua_nodeId_destroy(MiruaNodeId* nodeId);
 size_t mirua_nodeId_to_string(char* buf, size_t bufisze, const MiruaNodeId* nodeid, size_t indent);
 void mirua_nodeId_copy(const MiruaNodeId* src, MiruaNodeId* dst);
+bool mirua_nodeId_is_structure(MiruaContext* ctx, const UA_NodeId node);
 // MiruaValue functions
 void mirua_value_init(MiruaValue* value);
 void mirua_value_clear(MiruaValue* value);
-MiruaValue* mirua_value_create(const UA_Variant* value, const MiruaNodeId* type);
+MiruaValue* _mirua_value_create(const UA_Variant* value, const MiruaNodeId* type);
+MiruaValue* mirua_value_create(UA_Client* client, const UA_NodeId* nodeId);
 void mirua_value_destroy(MiruaValue* value);
 size_t mirua_value_to_string(char* buf, size_t bufsize, const MiruaValue* value, size_t indent);
 
