@@ -6,12 +6,12 @@ Clua is OPC UA command line tool for browsing server and saving nodeids for tele
 C Learning repository. AI has touched the code. Memory leaks present. bad code present.
 
 ## Browse and save
-![Demo GIF](resources/browse_and_save.gif)
+![Demo GIF](Resources/browse_and_save.gif)
 ## config
-![Demo GIF](resources/config_example.gif)
+![Demo GIF](Resources/config_example.gif)
 ## structure
-![Demo GIF](resources/structure_example.png)
-![Demo GIF](resources/structure_example2.png)
+![Demo GIF](Resources/structure_example.png)
+![Demo GIF](Resources/structure_example2.png)
 ### Prerequisites
 Relies on open62541 for opc ua client. 
 
