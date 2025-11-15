@@ -122,7 +122,15 @@ void interpreter_normal_state_execute(Interpreter* interpreter, ASTNode* node) {
                 if (child->type == AST_RANGE) {
                     log_trace("[INTERPRETER] - SAVE");
                     mirua_save(
-                        interpreter->mirua_context, child->data.range.start, child->data.range.end);
+                        interpreter->mirua_context,
+                        -1,
+                        child->data.range.start,
+                        child->data.range.end);
+                } else if (child->type == AST_PARAMETER) {
+                    if (child->data.parameter.type == AST_PARAM_TYPE_INT) {
+                        mirua_save(
+                            interpreter->mirua_context, child->data.parameter.value.i, -1, -1);
+                    }
                 }
             }
         } break;

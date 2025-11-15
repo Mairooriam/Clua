@@ -15,7 +15,7 @@ void mirua_exploreNodes(MiruaContext* ctx, const char* node, int idx);
 int mirua_navigate_down(MiruaContext* ctx, size_t index);
 int mirua_navigate_up(MiruaContext* ctx);
 int mirua_navigate_to(MiruaContext* ctx, const char* nodeid_str);
-void mirua_save(MiruaContext* ctx, int start, int end);
+void mirua_save(MiruaContext* ctx, int idx, int start, int end);
 MiruaState mirua_state_get(MiruaContext* ctx);
 void mirua_state_change(MiruaContext* ctx, MiruaState newState);
 

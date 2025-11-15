@@ -4,7 +4,8 @@
 
 typedef enum {
     MIRUA_NODE_STRUCTURE,  // Has childrenExtensionObject/complex type
-    MIRUA_NODE_VALUE       // Leaf node primitive type like int, string
+    MIRUA_NODE_ARRAY,
+    MIRUA_NODE_VALUE  // Leaf node primitive type like int, string
 } MiruaNodeType;
 
 typedef struct MiruaNodeId {

@@ -105,17 +105,19 @@ int main(int argc, char* argv[]) {
         UA_NodeId node;
         UA_StatusCode status = UA_NodeId_parse(&node, str);
         // mirua_explore_value(ctx, &node);
-        if (mirua_nodeId_is_structure(ctx, node)) {
-            printf("NODE IS STRUCTURE!");
-            MiruaTreeNode* treeNode = mirua_tree_node_create(ctx->client, &node);
-            MiruaTree* tree = mirua_tree_create(treeNode);
-            mirua_build_structure_tree(ctx, tree, tree->root, &node);
-            char buf[1024 * 8];
-            size_t bufsize = sizeof(buf);
-            mirua_tree_to_string(buf, bufsize, tree);
-            log_trace("%s", buf);
-        }
-
+        // if (mirua_nodeId_is_structure(ctx->client, node)) {
+        //     printf("NODE IS STRUCTURE!");
+        //     MiruaTreeNode* treeNode = mirua_tree_node_create(ctx->client, node);
+        //     MiruaTree* tree = mirua_tree_create(treeNode);
+        //     mirua_build_structure_tree(ctx->client, tree, tree->root, node);
+        //     char buf[1024 * 8];
+        //     size_t bufsize = sizeof(buf);
+        //     mirua_tree_to_string(buf, bufsize, tee);
+        //     log_trace("%s", buf);
+        // }
+        //
+        //
+        mirua_explore_structure(ctx->client, node);
         mirua_module_free(ctx);
         return 0;
     }

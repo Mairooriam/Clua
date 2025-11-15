@@ -11,6 +11,7 @@
 //  -> select set filter 1-10 on
 //  -> etc. or set filter 1 4 5 6 9
 //  off filter 1 4 5 6 9
+//  TODO re think this filtering this is awful
 #define DEFAULT_DATATYPE_FILTER_MASK \
     ((1U << UA_DATATYPEKIND_INT32) | (1U << UA_DATATYPEKIND_STRING))
 typedef enum {
@@ -25,8 +26,10 @@ bool mirua_callback_filter_ALL(
     UA_NodeId childId, UA_NodeId referenceTypeId, UA_Client* client, void* data);
 bool mirua_callback_filter(
     UA_NodeId childId, UA_NodeId referenceTypeId, UA_Client* client, void* data);
+bool mirua_filter_is_numeric_or_bool(UA_Client* client, const UA_NodeId node);
 MiruaNodeFilter mirua_filter_get_func(MiruaFilterType type);
 const char* mirua_filter_get_name(MiruaFilterType type);
+MiruaNodeFilter mirua_filter_get_current_func(MiruaContext* ctx);
 MiruaFilterType mirua_filter_parse_type(const char* str);
 typedef struct MiruaConfig {
     char* endpoint;
@@ -35,7 +38,6 @@ typedef struct MiruaConfig {
     MiruaFilterType filterType;
     int printLevel;
     char* output_path;
-
 } MiruaConfig;
 
 // MAIN CONTEXT
@@ -43,7 +45,6 @@ typedef struct MiruaContext {
     UA_Client* client;
     UA_ClientConfig* ua_config;
     bool connected;
-
     MiruaNodeId currentNode;
     mirua_t_NodeList currentChildren;
     NodeIdHistory history;
@@ -147,7 +148,6 @@ size_t mirua_tree_node_to_string(
     char* buf, size_t bufsize, const MiruaTreeNode* node, size_t indent);
 size_t mirua_tree_to_string(char* buf, size_t bufsize, const MiruaTree* node);
 
-// TODO: explore UA_nodeidEx
 MiruaTree* mirua_tree_create(MiruaTreeNode* root);
 void mirua_tree_destroy(MiruaTree* tree);
 void mirua_tree_add_child(MiruaTree* tree, MiruaTreeNode* parent, MiruaTreeNode* child);
@@ -155,24 +155,29 @@ void mirua_tree_node_destroy(MiruaTreeNode* node);
 size_t mirua_tree_count_nodes(const MiruaTree* tree);
 MiruaTreeNode* _mirua_tree_node_create(
     const MiruaNodeId* nodeId, const MiruaValue* value, const UA_NodeId* type);
-MiruaTreeNode* mirua_tree_node_create(UA_Client* client, const UA_NodeId* node);
-void mirua_build_structure_tree(
-    MiruaContext* ctx, MiruaTree* tree, MiruaTreeNode* parent, const UA_NodeId* dataTypeId);
+MiruaTreeNode* mirua_tree_node_create(UA_Client* client, const UA_NodeId node);
+void mirua_tree_collect_values(mirua_t_NodeList* nodes, MiruaTree* tree);
+// structure
+void _mirua_build_structure_tree(
+    UA_Client* client, MiruaTree* tree, MiruaTreeNode* parent, const UA_NodeId node);
+MiruaTree* mirua_explore_structure(UA_Client* client, const UA_NodeId node);
+bool mirua_nodeId_is_structure(UA_Client* client, const UA_NodeId node);
+bool mirua_nodeId_nodeClass_is(UA_Client* client, const UA_NodeId node, UA_NodeClass class_in);
 
 // MiruaNodeId functions
 void mirua_nodeId_init(MiruaNodeId* nodeId);
 void mirua_nodeId_clear(MiruaNodeId* nodeId);
-MiruaNodeId* _mirua_nodeId_create(const UA_NodeId* nodeId, const UA_QualifiedName* name);
-MiruaNodeId* mirua_nodeId_create(UA_Client* client, const UA_NodeId* nodeId);
+MiruaNodeId* _mirua_nodeId_create(const UA_NodeId nodeId, const UA_QualifiedName* name);
+MiruaNodeId* mirua_nodeId_create(UA_Client* client, const UA_NodeId nodeId);
 void mirua_nodeId_destroy(MiruaNodeId* nodeId);
 size_t mirua_nodeId_to_string(char* buf, size_t bufisze, const MiruaNodeId* nodeid, size_t indent);
 void mirua_nodeId_copy(const MiruaNodeId* src, MiruaNodeId* dst);
-bool mirua_nodeId_is_structure(MiruaContext* ctx, const UA_NodeId node);
+
 // MiruaValue functions
 void mirua_value_init(MiruaValue* value);
 void mirua_value_clear(MiruaValue* value);
 MiruaValue* _mirua_value_create(const UA_Variant* value, const MiruaNodeId* type);
-MiruaValue* mirua_value_create(UA_Client* client, const UA_NodeId* nodeId);
+MiruaValue* mirua_value_create(UA_Client* client, const UA_NodeId nodeId);
 void mirua_value_destroy(MiruaValue* value);
 size_t mirua_value_to_string(char* buf, size_t bufsize, const MiruaValue* value, size_t indent);
 
