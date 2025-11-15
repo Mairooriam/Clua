@@ -359,8 +359,8 @@ void mirua_save(MiruaContext* ctx, int idx, int start, int end) {
     }
 
     // SERIALIZING
-    log_trace(
-        "[SAVE] Serializing children from %d to %d to '%s' (%s)",
+    printf(
+        "[SAVE] Serializing children from %d to %d to '%s' (%s)\n",
         start,
         end - 1,
         filename,
@@ -369,8 +369,7 @@ void mirua_save(MiruaContext* ctx, int idx, int start, int end) {
     if (serializer->serialize_nodes_to_file(&subset, f) == SIZE_MAX) {
         log_error("[SAVE] Serialization failed or buffer overflow");
     } else {
-        log_trace(
-            "[SAVE] Successfully %s to '%s'", mode[0] == 'a' ? "appended" : "saved", filename);
+        printf("[SAVE] Successfully %s to '%s'\n", mode[0] == 'a' ? "appended" : "saved", filename);
     }
 
     fclose(f);
@@ -711,7 +710,7 @@ void mirua_exploreNodes(MiruaContext* ctx, const char* node, int idx) {
     }
 }
 int mirua_navigate_down(MiruaContext* ctx, size_t idx) {
-    printf("NAVIGATE_DOWN triggered\n");
+    log_trace("NAVIGATE_DOWN triggered\n");
 
     if (idx >= ctx->currentChildren.size) {
         log_warn("[NAVIGATE] - Invalid child index: %zu", idx);

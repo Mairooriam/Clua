@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
         // mirua_print_current_children(ctx);
         //
         // UA_String str = UA_String_fromChars("ns=5;s=::Program1:mouse_advv");
-        UA_String str = UA_String_fromChars("ns=5;s=::Program1:Mir_array");
+        UA_String str = UA_String_fromChars("ns=5;s=::Program1:Mouses");
 
         UA_NodeId node;
         UA_StatusCode status = UA_NodeId_parse(&node, str);
@@ -155,7 +155,7 @@ int main(int argc, char* argv[]) {
 
     fPtr = fopen(str, "r");
     if (fPtr == NULL) {
-        printf("file couldn't be opened. File: %s", str);
+        printf("file couldn't be opened. File: %s\n", str);
     }
 
     free(str);
