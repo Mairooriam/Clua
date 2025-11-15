@@ -16,7 +16,7 @@ services:
       - influxdb_data:/var/lib/influxdb2
 
   telegraf:
-    image: telegraf:1.28
+    image: telegraf:1.34.3
     container_name: telegraf
     depends_on:
       - influxdb
