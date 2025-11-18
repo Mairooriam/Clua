@@ -1,12 +1,16 @@
 #include "mirua_serialization.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "log.h"
+#include "mirua_module_internal.h"
 #include "mirua_types_internal.h"
 #include "open62541/types.h"
 #include "utils.h"
 #define SERIALIZER_TO_FILE_INITIAL_MEMORY 1024 * 10
+#define SERIALIZER_LINE_BUF_SIZE 256
 
 // CSV
 // static int _csv_serialize_node(const UA_NodeId* node, char* buf, size_t bufsize, size_t* offset)
@@ -72,17 +76,36 @@ static size_t telegraf_serialize_node(char* buf, size_t bufsize, const MiruaNode
     size_t offset = 0;
 
     if (safe_snprintf(buf, &offset, bufsize, "[[inputs.opcua.nodes]]\n") != 0) return SIZE_MAX;
-    if (safe_snprintf(buf, &offset, bufsize, "name = \"%.*s\"\n",
-                      (int)node->name.name.length, node->name.name.data) != 0) return SIZE_MAX;
-    if (safe_snprintf(buf, &offset, bufsize, "namespace = \"%u\"\n", node->nodeid.namespaceIndex) != 0) return SIZE_MAX;
+    if (safe_snprintf(
+            buf,
+            &offset,
+            bufsize,
+            "name = \"%.*s\"\n",
+            (int)node->name.name.length,
+            node->name.name.data) != 0)
+        return SIZE_MAX;
+    if (safe_snprintf(buf, &offset, bufsize, "namespace = \"%u\"\n", node->nodeid.namespaceIndex) !=
+        0)
+        return SIZE_MAX;
 
     if (node->nodeid.identifierType == UA_NODEIDTYPE_STRING) {
-        if (safe_snprintf(buf, &offset, bufsize, "identifier_type = \"%s\"\n", "s") != 0) return SIZE_MAX;
-        if (safe_snprintf(buf, &offset, bufsize, "identifier = \"%.*s\"\n",
-                          (int)node->nodeid.identifier.string.length, node->nodeid.identifier.string.data) != 0) return SIZE_MAX;
+        if (safe_snprintf(buf, &offset, bufsize, "identifier_type = \"%s\"\n", "s") != 0)
+            return SIZE_MAX;
+        if (safe_snprintf(
+                buf,
+                &offset,
+                bufsize,
+                "identifier = \"%.*s\"\n",
+                (int)node->nodeid.identifier.string.length,
+                node->nodeid.identifier.string.data) != 0)
+            return SIZE_MAX;
     } else if (node->nodeid.identifierType == UA_NODEIDTYPE_NUMERIC) {
-        if (safe_snprintf(buf, &offset, bufsize, "identifier_type = \"%s\"\n", "i") != 0) return SIZE_MAX;
-        if (safe_snprintf(buf, &offset, bufsize, "identifier = \"%u\"\n", node->nodeid.identifier.numeric) != 0) return SIZE_MAX;
+        if (safe_snprintf(buf, &offset, bufsize, "identifier_type = \"%s\"\n", "i") != 0)
+            return SIZE_MAX;
+        if (safe_snprintf(
+                buf, &offset, bufsize, "identifier = \"%u\"\n", node->nodeid.identifier.numeric) !=
+            0)
+            return SIZE_MAX;
     } else if (node->nodeid.identifierType == UA_NODEIDTYPE_BYTESTRING) {
         assert(0 && "not implemented");
         return SIZE_MAX;
@@ -100,7 +123,8 @@ static size_t telegraf_serialize_nodes(char* buf, size_t bufsize, const mirua_t_
     if (safe_snprintf(buf, &offset, bufsize, "#GENERATED NODES\n") != 0) return SIZE_MAX;
 
     for (size_t i = 0; i < nodes->size; i++) {
-        size_t node_written = telegraf_serialize_node(buf + offset, bufsize - offset, &nodes->nodeIds[i]);
+        size_t node_written =
+            telegraf_serialize_node(buf + offset, bufsize - offset, &nodes->nodeIds[i]);
         if (node_written == SIZE_MAX) return SIZE_MAX;
         offset += node_written;
         if (safe_snprintf(buf, &offset, bufsize, "\n") != 0) return SIZE_MAX;
@@ -133,6 +157,111 @@ static size_t telegraf_serialize_nodes_to_file(const mirua_t_NodeList* nodes, FI
     free(buf);
     return 0;
 }
+
+static int telegraf_count_nodes_in_config(const char* file) {
+    FILE* fp = fopen(file, "r");
+    if (!fp) {
+        log_error("[SERIALIZER:TELEGRAF] - Failed to open file.");
+        return -1;
+    }
+    char line[SERIALIZER_LINE_BUF_SIZE];
+    int size = 0;
+    while (fgets(line, sizeof line, fp)) {
+        if (strstr(line, "[[inputs.opcua.nodes]]")) {
+            size++;
+        }
+    }
+
+    return size;
+}
+
+// TODO: make generic file open thingy with windows and make it with proper error messages etc.
+static int telegraf_deserialize_nodes(const char* filepath, mirua_t_NodeList* nodes) {
+    if (!nodes) return -1;
+
+    size_t size = telegraf_count_nodes_in_config(filepath);
+    printf("File: %s has [%zu] nodes\n", filepath, size);
+    FILE* fp = fopen(filepath, "r");
+    if (!fp) {
+        perror("fopen failed");
+        log_error("[TELEGRAF_SERIALIZER] - failed to open file at \"%s\"", filepath);
+        return -1;
+    }
+
+    char line[SERIALIZER_LINE_BUF_SIZE];
+    MiruaNodeId node;
+    bool parsing_node = false;
+    int field_index = 0;  // 0=name, 1=namespace, 2=identifier_type, 3=identifier
+
+    while (fgets(line, sizeof(line), fp)) {
+        str_remove_substring(line, "\n");
+
+        if (strstr(line, "[[inputs.opcua.nodes]]")) {
+            // Start new node
+            UA_NodeId_init(&node.nodeid);
+            UA_QualifiedName_init(&node.name);
+            parsing_node = true;
+            field_index = 0;
+            continue;
+        }
+
+        if (parsing_node) {
+            bool parsed = false;
+            switch (field_index) {
+                case 0: {  // name
+                    char name_buf[256];
+                    if (sscanf(line, "name = \"%[^\"]\"", name_buf) == 1) {
+                        // TODO: check if name == UA_QualifiedName
+                        node.name.name = UA_String_fromChars(name_buf);
+                        node.name.namespaceIndex = 0;
+                        parsed = true;
+                    }
+                } break;
+                case 1: {  // namespace
+                    unsigned int ns;
+                    if (sscanf(line, "namespace = \"%u\"", &ns) == 1) {
+                        node.nodeid.namespaceIndex = ns;
+                        parsed = true;
+                    }
+                } break;
+                case 2: {  // identifier_type
+                    char type_buf[2];
+                    if (sscanf(line, "identifier_type = \"%1s\"", type_buf) == 1) {
+                        node.nodeid.identifierType =
+                            (type_buf[0] == 's') ? UA_NODEIDTYPE_STRING : UA_NODEIDTYPE_NUMERIC;
+                        parsed = true;
+                    }
+                } break;
+                case 3: {  // identifier
+                    char id_buf[256];
+                    if (sscanf(line, "identifier = \"%[^\"]\"", id_buf) == 1) {
+                        if (node.nodeid.identifierType == UA_NODEIDTYPE_STRING) {
+                            node.nodeid.identifier.string = UA_String_fromChars(id_buf);
+                        } else {
+                            node.nodeid.identifier.numeric = atoi(id_buf);
+                        }
+                        mirua_nodelist_add(
+                            nodes,
+                            &node);  // TODO: add shallow copy. if parsing fails gotta free stuff :)
+                        parsing_node = false;
+                        parsed = true;
+                    }
+                } break;
+            }
+
+            if (parsed) {
+                field_index++;
+            } else {
+                log_error("Failed to parse field %d for node: %s", field_index, line);
+                mirua_nodeId_clear(&node);
+                parsing_node = false;
+            }
+        }
+    }
+
+    fclose(fp);
+    return 0;
+}
 MiruaNodeSerializer* mirua_serializer_get(SerializerFormat format) {
     // static MiruaNodeSerializer csv_serializer = {
     //     .serialize_node = csv_serialize_node,
@@ -145,7 +274,7 @@ MiruaNodeSerializer* mirua_serializer_get(SerializerFormat format) {
     static MiruaNodeSerializer telegraf_serializer = {
         .serialize_node = telegraf_serialize_node,
         .serialize_nodes = telegraf_serialize_nodes,
-        .deserialize_nodes = NULL,
+        .deserialize_nodes = telegraf_deserialize_nodes,
         .serialize_nodes_to_file = telegraf_serialize_nodes_to_file,
         .save_to_file = NULL,
         .format_name = "telegraf"};

@@ -1,6 +1,9 @@
 # Clua
 
 Clua is OPC UA command line tool for browsing server and saving nodeids for telegraf opc ua .conf file made in C. Handles structures, arrays and primitive types. tested only with B&R opcua server.
+
+Currently has basic browsing and saving of nodes in fromat for telegraf.
+
 ## Disclaimer
 
 C Learning repository. AI has touched the code. Memory leaks present. bad code present.
