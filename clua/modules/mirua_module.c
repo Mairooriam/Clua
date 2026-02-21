@@ -12,7 +12,7 @@
 
 #include "ast.h"
 #include "debug_buf.h"
-#include "interpreter.h"
+
 #include "log.h"
 #include "mirua_module.h"
 #include "mirua_module_internal.h"

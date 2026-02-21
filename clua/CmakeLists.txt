@@ -8,7 +8,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
+add_compile_definitions(_AMD64_)
 # Enable all warnings and sanitizers for GCC/Clang
 if(MSVC)
     add_compile_options(/W4)
@@ -23,15 +23,13 @@ else()
 endif()
 
 find_package(open62541 REQUIRED)
+find_package(replxx REQUIRED)
+find_package(Threads REQUIRED)
 # Source files
 set(SOURCES
-    src/main.cpp
+    src/main.c
     src/utils.c
-    src/lexer.c
-    src/interpreter.c
-    src/ast.c
     src/log.c
-    src/parser.c
     modules/mirua_module.c
     modules/mirua_to_string.c
     modules/mirua_serialization.c
@@ -48,4 +46,4 @@ target_include_directories(main PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/modules
 )
-target_link_libraries(main PRIVATE open62541::open62541 ws2_32 iphlpapi)
+target_link_libraries(main PRIVATE open62541::open62541 replxx::replxx Threads::Threads ws2_32 iphlpapi)
