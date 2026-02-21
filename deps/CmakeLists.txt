@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
+project(open62541_builder CXX)
 project(open62541_builder C)
+
 
 
 include(FetchContent)
@@ -11,4 +13,5 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(open62541)
 set_target_properties(open62541 PROPERTIES FOLDER "Dependencies")
+
 

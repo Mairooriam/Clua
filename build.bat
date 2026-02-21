@@ -9,10 +9,10 @@ cd build
 
 REM Run CMake configure step with Debug build type and Ninja generator
 
-cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ../clua
+cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Debug ../clua
 
-REM Build the project in Debug mode using Ninja
-ninja
+REM Build the project in Debug mod2"e using MSBuild
+cmake --build . --config Debug
 
 REM Go back to misc directory
 cd ..\

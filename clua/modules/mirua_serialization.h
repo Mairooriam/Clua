@@ -7,7 +7,7 @@ typedef struct {
     size_t (*serialize_node)(char* buf, size_t bufsize, const MiruaNodeId* node);
     size_t (*serialize_nodes)(char* buf, size_t bufsize, const mirua_t_NodeList* nodes);
     size_t (*serialize_nodes_to_file)(const mirua_t_NodeList* nodes, FILE* file);
-    int (*deserialize_nodes)(const char* filepath, mirua_t_NodeList* out_nodes);
+    size_t (*deserialize_nodes)(char* buf, size_t bufsize, mirua_t_NodeList* out_nodes);
     size_t (*save_to_file)(const mirua_t_NodeList* nodes, const char* filename);
     size_t (*load_from_file)(mirua_t_NodeList* out_nodes, const char* filename);
     const char* format_name;

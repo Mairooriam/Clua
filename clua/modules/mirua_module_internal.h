@@ -193,16 +193,7 @@ static inline void mirua_clear_nodeList(mirua_t_NodeList* nodes) {
     }
     nodes->size = 0;
 }
-static inline void mirua_nodelist_add(mirua_t_NodeList* nodes, const MiruaNodeId* node) {
-    if (nodes->size < nodes->capacity) {
-        nodes->nodeIds[nodes->size] = *node;  // Copy struct
-        nodes->size++;  // Increment size
-    } else {
-        log_error("[NODELIST] - Capacity exceeded, cannot add node");
-        //TODO: add grow when assert hits
-        assert(0 && "fix grow :)");
-    }
-}
+
 static inline void mirua_free_nodeList(mirua_t_NodeList* nodes) {
     mirua_clear_nodeList(nodes);
     if (nodes->nodeIds) {
