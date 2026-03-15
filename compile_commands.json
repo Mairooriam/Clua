@@ -1,0 +1,50 @@
+[
+{
+  "directory": "C:/Users/35850/Desktop/repositories/clua/build/clang-debug",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -DLOG_USE_COLOR -DREPLXX_STATIC -D_AMD64_ -D_CRT_SECURE_NO_WARNINGS -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules -imsvcC:\\lib\\open62541\\include -imsvcC:\\lib\\include /DWIN32 /D_WINDOWS /Zi /Ob0 /Od /RTC1 /std:c17 -MDd /W4 /Foclua\\CMakeFiles\\main.dir\\src\\main.c.obj /Fdclua\\CMakeFiles\\main.dir\\ -c -- C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src\\main.c",
+  "file": "C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src\\main.c",
+  "output": "clua\\CMakeFiles\\main.dir\\src\\main.c.obj"
+},
+{
+  "directory": "C:/Users/35850/Desktop/repositories/clua/build/clang-debug",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -DLOG_USE_COLOR -DREPLXX_STATIC -D_AMD64_ -D_CRT_SECURE_NO_WARNINGS -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules -imsvcC:\\lib\\open62541\\include -imsvcC:\\lib\\include /DWIN32 /D_WINDOWS /Zi /Ob0 /Od /RTC1 /std:c17 -MDd /W4 /Foclua\\CMakeFiles\\main.dir\\src\\utils.c.obj /Fdclua\\CMakeFiles\\main.dir\\ -c -- C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src\\utils.c",
+  "file": "C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src\\utils.c",
+  "output": "clua\\CMakeFiles\\main.dir\\src\\utils.c.obj"
+},
+{
+  "directory": "C:/Users/35850/Desktop/repositories/clua/build/clang-debug",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -DLOG_USE_COLOR -DREPLXX_STATIC -D_AMD64_ -D_CRT_SECURE_NO_WARNINGS -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules -imsvcC:\\lib\\open62541\\include -imsvcC:\\lib\\include /DWIN32 /D_WINDOWS /Zi /Ob0 /Od /RTC1 /std:c17 -MDd /W4 /Foclua\\CMakeFiles\\main.dir\\src\\log.c.obj /Fdclua\\CMakeFiles\\main.dir\\ -c -- C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src\\log.c",
+  "file": "C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src\\log.c",
+  "output": "clua\\CMakeFiles\\main.dir\\src\\log.c.obj"
+},
+{
+  "directory": "C:/Users/35850/Desktop/repositories/clua/build/clang-debug",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -DLOG_USE_COLOR -DREPLXX_STATIC -D_AMD64_ -D_CRT_SECURE_NO_WARNINGS -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules -imsvcC:\\lib\\open62541\\include -imsvcC:\\lib\\include /DWIN32 /D_WINDOWS /Zi /Ob0 /Od /RTC1 /std:c17 -MDd /W4 /Foclua\\CMakeFiles\\main.dir\\modules\\mirua_module.c.obj /Fdclua\\CMakeFiles\\main.dir\\ -c -- C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules\\mirua_module.c",
+  "file": "C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules\\mirua_module.c",
+  "output": "clua\\CMakeFiles\\main.dir\\modules\\mirua_module.c.obj"
+},
+{
+  "directory": "C:/Users/35850/Desktop/repositories/clua/build/clang-debug",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -DLOG_USE_COLOR -DREPLXX_STATIC -D_AMD64_ -D_CRT_SECURE_NO_WARNINGS -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules -imsvcC:\\lib\\open62541\\include -imsvcC:\\lib\\include /DWIN32 /D_WINDOWS /Zi /Ob0 /Od /RTC1 /std:c17 -MDd /W4 /Foclua\\CMakeFiles\\main.dir\\modules\\mirua_to_string.c.obj /Fdclua\\CMakeFiles\\main.dir\\ -c -- C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules\\mirua_to_string.c",
+  "file": "C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules\\mirua_to_string.c",
+  "output": "clua\\CMakeFiles\\main.dir\\modules\\mirua_to_string.c.obj"
+},
+{
+  "directory": "C:/Users/35850/Desktop/repositories/clua/build/clang-debug",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -DLOG_USE_COLOR -DREPLXX_STATIC -D_AMD64_ -D_CRT_SECURE_NO_WARNINGS -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules -imsvcC:\\lib\\open62541\\include -imsvcC:\\lib\\include /DWIN32 /D_WINDOWS /Zi /Ob0 /Od /RTC1 /std:c17 -MDd /W4 /Foclua\\CMakeFiles\\main.dir\\modules\\mirua_serialization.c.obj /Fdclua\\CMakeFiles\\main.dir\\ -c -- C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules\\mirua_serialization.c",
+  "file": "C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules\\mirua_serialization.c",
+  "output": "clua\\CMakeFiles\\main.dir\\modules\\mirua_serialization.c.obj"
+},
+{
+  "directory": "C:/Users/35850/Desktop/repositories/clua/build/clang-debug",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -DLOG_USE_COLOR -DREPLXX_STATIC -D_AMD64_ -D_CRT_SECURE_NO_WARNINGS -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules -imsvcC:\\lib\\open62541\\include -imsvcC:\\lib\\include /DWIN32 /D_WINDOWS /Zi /Ob0 /Od /RTC1 /std:c17 -MDd /W4 /Foclua\\CMakeFiles\\main.dir\\modules\\file\\file_windows.c.obj /Fdclua\\CMakeFiles\\main.dir\\ -c -- C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules\\file\\file_windows.c",
+  "file": "C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules\\file\\file_windows.c",
+  "output": "clua\\CMakeFiles\\main.dir\\modules\\file\\file_windows.c.obj"
+},
+{
+  "directory": "C:/Users/35850/Desktop/repositories/clua/build/clang-debug",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -DLOG_USE_COLOR -DREPLXX_STATIC -D_AMD64_ -D_CRT_SECURE_NO_WARNINGS -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src -IC:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\modules -imsvcC:\\lib\\open62541\\include -imsvcC:\\lib\\include /DWIN32 /D_WINDOWS /Zi /Ob0 /Od /RTC1 /std:c17 -MDd /W4 /Foclua\\CMakeFiles\\main.dir\\src\\debug_buf.c.obj /Fdclua\\CMakeFiles\\main.dir\\ -c -- C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src\\debug_buf.c",
+  "file": "C:\\Users\\35850\\Desktop\\repositories\\clua\\clua\\src\\debug_buf.c",
+  "output": "clua\\CMakeFiles\\main.dir\\src\\debug_buf.c.obj"
+}
+]

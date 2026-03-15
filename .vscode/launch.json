@@ -5,18 +5,18 @@
       "name": "Debug main.exe",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/main.exe",
+      "program": "${workspaceFolder}/build/clang-debug/clua/main.exe",
       "args": [],
-      "cwd": "${workspaceFolder}/build",
+      "cwd": "${workspaceFolder}/build/clang-debug/clua",
       "environment": []
     },
     {
       "name": "Debug client_types_custom.exe",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/client_types_custom.exe",
+      "program": "${workspaceFolder}/build/clang-debug/clua/client_types_custom.exe",
       "args": [],
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/build/clang-debug/clua",
       "environment": []
     }
   ]

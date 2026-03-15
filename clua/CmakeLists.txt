@@ -28,13 +28,12 @@ find_package(Threads REQUIRED)
 # Source files
 set(SOURCES
     src/main.c
-    src/utils.c
     src/log.c
+    src/debug_buf.c
     modules/mirua_module.c
     modules/mirua_to_string.c
     modules/mirua_serialization.c
     modules/file/file_windows.c
-    src/debug_buf.c
     src/utils.c
 )
 
