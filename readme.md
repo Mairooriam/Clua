@@ -18,9 +18,7 @@ C Learning repository. AI has touched the code. Memory leaks present. bad code p
 ### Prerequisites
 Relies on open62541 for opc ua client. 
 
-### Build Instructions
-```bash
-git clone https://github.com/yourusername/clua.git
-cd clua
-build.bat
-```
+### TODO
+
+- Get functionality up and running with replxx
+- If connection fails promt user to use open65421 server ( runs a server on another thread and connects to it or single threeaded)
