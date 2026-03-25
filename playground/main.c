@@ -107,6 +107,8 @@ int main(int argc, char const* argv[]) {
     }
 
     if (strcmp(argv[1], "1") == 0) {
+        printf("MSCV thingy: %d\n", _MSC_FULL_VER);
+
         UA_Client* client = UA_Client_new();
 
         const char* endpoint = "opc.tcp://127.0.0.1:4840";
@@ -137,8 +139,28 @@ int main(int argc, char const* argv[]) {
 
         log_warn("penis");
     } else if (strcmp(argv[1], "2") == 0) {
+        const char* str = "0 test";
+        int index;
+        char value[128];
+
+        // Parse the string into specific variables
+        if (sscanf(str, "%d %127[^\n]", &index, value) == 2) {
+            printf("Index: %d\n", index);
+            printf("Value: %s\n", value);
+        } else {
+            printf("Invalid input format.\n");
+        }
+
         printf("Running Test 2...\n");
     } else if (strcmp(argv[1], "3") == 0) {
+        const char* args = "10 11";
+        int idx1 = INT_MAX, idx2 = INT_MAX;
+        if (sscanf(args, "%d %d", &idx1, &idx2) == 1) {
+            printf("hello parsed 1 number 1:%d 2:%d\n", idx1, idx2);
+        } else if (sscanf(args, "%d %d", &idx1, &idx2) == 2) {
+            printf("parsed 2 1:%d 2:%d\n", idx1, idx2);
+        }
+
         printf("Running Test 3...\n");
     } else {
         printf("Unknown test: %s\n", argv[1]);

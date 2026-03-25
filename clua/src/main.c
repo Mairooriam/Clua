@@ -1,36 +1,63 @@
+#include <assert.h>
+#include <limits.h>
 #include <replxx.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "log.h"
 #include "mirua_module.h"
+#include "mirua_module_internal.h"
+#include "mirua_types.h"
 
 // Forward declarations for command handlers
 void cmd_connect(MiruaContext* ctx, const char* args);
 void cmd_ls(MiruaContext* ctx, const char* args);
-void cmd_config(MiruaContext* ctx, const char* args);
+void cmd_main_change_to_config(MiruaContext* ctx, const char* args);
 void cmd_cd(MiruaContext* ctx, const char* args);
 void cmd_cd_up(MiruaContext* ctx, const char* args);
 void cmd_save(MiruaContext* ctx, const char* args);
+
+// config context commands
+void cmd_config_ls(MiruaContext* ctx, const char* args);
+void cmd_config_change_to_main(MiruaContext* ctx, const char* args);
+void cmd_config_edit(MiruaContext* ctx, const char* args);
+
 // Command structure
 typedef struct {
     const char* name;
     const char* description;
+    MiruaState context;
     void (*handler)(MiruaContext* ctx, const char* args);
 } Command;
 
 // Command table
 static const Command commands[] = {
-    {"connect", "Connect to OPC-UA server", cmd_connect},
-    {"con", "Connect to OPC-UA server (alias)", cmd_connect},
-    {"ls", "List nodes", cmd_ls},
-    {"config", "Show configuration", cmd_config},
-    {"cd", "Change directory", cmd_cd},
-    {"cd..", "Go up one level", cmd_cd_up},
-    {"save", "saves nodes for telegraf format", cmd_save},
-};
+    // Main context commands
+    {"connect", "Connect to OPC-UA server", MIRUA_STATE_NORMAL, cmd_connect},
+    {"con", "Connect to OPC-UA server (alias)", MIRUA_STATE_NORMAL, cmd_connect},
+    {"ls", "List nodes", MIRUA_STATE_NORMAL, cmd_ls},
+    {"config", "Show configuration", MIRUA_STATE_NORMAL, cmd_main_change_to_config},
+    {"cd", "cd [idx] | cd <nodeid>", MIRUA_STATE_NORMAL, cmd_cd},
+    {"cd..", "Go up one level", MIRUA_STATE_NORMAL, cmd_cd_up},
+    {"save", "save <start> <end> | save <index>", MIRUA_STATE_NORMAL, cmd_save},
 
+    // Config context commands
+    {"ls", "ls ?[idx]", MIRUA_STATE_CONFIG, cmd_config_ls},
+    {"main", "Change to main context", MIRUA_STATE_CONFIG, cmd_config_change_to_main},
+    {"edit", "edit [idx] <new value>", MIRUA_STATE_CONFIG, cmd_config_edit}};
 #define COMMAND_COUNT (sizeof(commands) / sizeof(commands[0]))
+
+const Command* get_command(const char* commandName, MiruaState state) {
+    for (size_t i = 0; i < COMMAND_COUNT; i++) {
+        if (strcmp(commands[i].name, commandName) == 0 && commands[i].context == state) {
+            return &commands[i];
+        }
+    }
+
+    assert(0 && "meant for internal use. fix if u call with wrong commandName");
+    return NULL;
+}
 
 void print_welcome(void) {
     printf("=== MirWiz Command Line Interface ===\n");
@@ -40,7 +67,7 @@ void print_welcome(void) {
 
 void completion_callback(
     const char* prefix, replxx_completions* completions, int* context_len, void* user_data) {
-    (void)user_data;
+    MiruaContext* ctx = (MiruaContext*)user_data;
 
     if (!prefix) {
         if (context_len) *context_len = 0;
@@ -61,8 +88,10 @@ void completion_callback(
     // Only complete if we're at the beginning (first word = command)
     if (word_start == prefix) {
         for (size_t i = 0; i < COMMAND_COUNT; ++i) {
-            if (strncmp(commands[i].name, word_start, word_len) == 0) {
-                replxx_add_completion(completions, commands[i].name);
+            if (commands[i].context == ctx->state) {
+                if (strncmp(commands[i].name, word_start, word_len) == 0) {
+                    replxx_add_completion(completions, commands[i].name);
+                }
             }
         }
     }
@@ -76,10 +105,12 @@ void dispatch_command(const char* input, MiruaContext* ctx) {
 
     // Find and execute command
     for (size_t i = 0; i < COMMAND_COUNT; ++i) {
-        if (strcmp(cmd, commands[i].name) == 0) {
-            const char* args_str = (args_parsed >= 2) ? arg : "";
-            commands[i].handler(ctx, args_str);
-            return;
+        if (commands[i].context == ctx->state) {
+            if (strcmp(cmd, commands[i].name) == 0) {
+                const char* args_str = (args_parsed >= 2) ? arg : "";
+                commands[i].handler(ctx, args_str);
+                return;
+            }
         }
     }
 
@@ -97,31 +128,56 @@ void cmd_ls(MiruaContext* ctx, const char* args) {
     mirua_exploreNodes(ctx, "", -1);
 }
 
-void cmd_config(MiruaContext* ctx, const char* args) {
+void cmd_config_ls(MiruaContext* ctx, const char* args) {
+    if (strlen(args) == 0) {
+        mirua_config_print_ctx(ctx);
+    } else {
+        int index;
+        if (sscanf(args, "%d", &index) == 1) {
+            mirua_config_print_by_idx(ctx, index);
+            printf("Hello world");
+        } else {
+            log_error("Invalid input. { %s }", get_command("ls", ctx->state)->description);
+        }
+    }
+}
+
+void cmd_config_edit(MiruaContext* ctx, const char* args) {
+    // TODO: if too tidious move into some lexer stuff if needed
+    int index;
+    char value[128];
+
+    if (sscanf(args, "%d %127[^\n]", &index, value) != 2) {
+        log_error("Invalid input. { %s }", get_command("edit", ctx->state)->description);
+    }
+
+    mirua_config_set_by_idx(&ctx->config, index, value);
+    printf("%s", args);
+}
+
+void cmd_main_change_to_config(MiruaContext* ctx, const char* args) {
     (void)args;
-    mirua_config_print_ctx(ctx);
+    mirua_state_change(ctx, MIRUA_STATE_CONFIG);
+}
+
+void cmd_config_change_to_main(MiruaContext* ctx, const char* args) {
+    (void)args;
+    mirua_state_change(ctx, MIRUA_STATE_NORMAL);
 }
 
 void cmd_cd(MiruaContext* ctx, const char* args) {
+    // TODO: add parsing for nodeid
     if (strlen(args) == 0) {
-        printf("Usage: cd <index>\n");
+        log_info("Invalid input. %s", get_command("cd", ctx->state)->description);
         return;
     }
 
-    char* endptr;
-    long index = strtol(args, &endptr, 10);
-
-    if (*endptr != '\0' || endptr == args) {
-        printf("Error: Invalid index '%s'\n", args);
-        return;
+    int index;
+    if (sscanf(args, "%d", &index) != 1) {
+        log_info("Invalid input. %s", get_command("cd", ctx->state)->description);
+    } else {
+        mirua_navigate_down(ctx, index);
     }
-
-    if (index < 0 || index > INT_MAX) {
-        printf("Error: Index out of range\n");
-        return;
-    }
-
-    mirua_navigate_down(ctx, (int)index);
 }
 
 void cmd_cd_up(MiruaContext* ctx, const char* args) {
@@ -133,62 +189,19 @@ void cmd_cd_up(MiruaContext* ctx, const char* args) {
 
 void cmd_save(MiruaContext* ctx, const char* args) {
     if (strlen(args) == 0) {
-        printf("Usage: save <start> [end]\n");
-        printf("       save <index>        - save single node\n");
-        printf("       save <start> <end>  - save range of nodes\n");
+        log_info("Invalid input. %s", get_command("save", ctx->state)->description);
         return;
     }
 
-    char start_str[32], end_str[32];
-    int parsed = sscanf(args, "%31s %31s", start_str, end_str);
-    
-    if (parsed < 1) {
-        printf("Error: Invalid arguments\n");
-        return;
-    }
-
-    // Parse start index
-    char* endptr;
-    long start = strtol(start_str, &endptr, 10);
-    if (*endptr != '\0' || endptr == start_str) {
-        printf("Error: Invalid start index '%s'\n", start_str);
-        return;
-    }
-
-    // Validate start index
-    if (start < 0) {
-        printf("Error: Index must be non-negative\n");
-        return;
-    }
-
-    // Check if it's a single node or range
+    int idx1 = INT_MAX, idx2 = INT_MAX;
+    int parsed = sscanf(args, "%d %d", &idx1, &idx2);
     if (parsed == 1) {
-        // Single node: use idx parameter
-        printf("Saving node %ld...\n", start);
-        mirua_save(ctx, (int)start, -1, -1);
+        mirua_save(ctx, idx1, -1, -1);
+    } else if (parsed == 2) {
+        mirua_save(ctx, -1, idx1, idx2);
     } else {
-        // Range: parse end index
-        long end = strtol(end_str, &endptr, 10);
-        if (*endptr != '\0' || endptr == end_str) {
-            printf("Error: Invalid end index '%s'\n", end_str);
-            return;
-        }
-
-        if (end < 0) {
-            printf("Error: End index must be non-negative\n");
-            return;
-        }
-        
-        if (start > end) {
-            printf("Error: Start index must be <= end index\n");
-            return;
-        }
-
-        // Range: use start/end parameters
-        printf("Saving nodes from %ld to %ld...\n", start, end);
-        mirua_save(ctx, -1, (int)start, (int)end);
+        log_info("Invalid input. %s", get_command("save", ctx->state)->description);
     }
-
 }
 
 int main(void) {
@@ -198,7 +211,7 @@ int main(void) {
     Replxx* replxx = replxx_init();
 
     // Set autocomplete callback
-    replxx_set_completion_callback(replxx, completion_callback, NULL);
+    replxx_set_completion_callback(replxx, completion_callback, ctx);
 
     while (1) {
         const char* input = replxx_input(replxx, "mirwiz> ");

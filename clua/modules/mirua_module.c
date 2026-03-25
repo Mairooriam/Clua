@@ -21,190 +21,11 @@
 #include "open62541/common.h"
 #include "open62541/nodeids.h"
 
-// static void buildNodeIdTree(UA_Client* client, const UA_NodeId* nodeId) {
-//     // Browse HasComponent children
-//     UA_BrowseRequest bReq;
-//     UA_BrowseRequest_init(&bReq);
-//     bReq.nodesToBrowseSize = 1;
-//     bReq.nodesToBrowse = UA_Array_new(1, &UA_TYPES[UA_TYPES_BROWSEDESCRIPTION]);
-//     UA_BrowseDescription_init(&bReq.nodesToBrowse[0]);
-//     UA_NodeId_copy(nodeId, &bReq.nodesToBrowse[0].nodeId);
-//     bReq.nodesToBrowse[0].browseDirection = UA_BROWSEDIRECTION_FORWARD;
-//     bReq.nodesToBrowse[0].referenceTypeId = UA_NODEID_NUMERIC(0, 47);  // HasComponent
-//     bReq.nodesToBrowse[0].includeSubtypes = true;
-//     bReq.nodesToBrowse[0].nodeClassMask = 0;
-//     bReq.nodesToBrowse[0].resultMask = UA_BROWSERESULTMASK_ALL;
-//
-//     UA_BrowseResponse bResp = UA_Client_Service_browse(client, bReq);
-//
-//     if (bResp.resultsSize == 1 && bResp.results[0].referencesSize == 0) {
-//         // No HasComponent children: this is a leaf node
-//         mirua_print_node_path(client, nodeId);
-//     } else {
-//         for (size_t i = 0; i < bResp.resultsSize; ++i) {
-//             for (size_t j = 0; j < bResp.results[i].referencesSize; ++j) {
-//                 UA_ReferenceDescription* ref = &bResp.results[i].references[j];
-//                 if (ref->nodeId.nodeId.identifierType == UA_NODEIDTYPE_NUMERIC ||
-//                     ref->nodeId.nodeId.identifierType == UA_NODEIDTYPE_STRING) {
-//                     buildNodeIdTree(client, &ref->nodeId.nodeId);  // Recursive call
-//                 }
-//             }
-//         }
-//     }
-//     UA_BrowseRequest_clear(&bReq);
-//     UA_BrowseResponse_clear(&bResp);
-// }
-
-// TODO: if not connected add handling for each method
-// void mirua_execute(MiruaContext* ctx, ASTNode* node) {
-//     (void)ctx;
-//     (void)node;
-// switch (node->command_type) {
-//     case TOKEN_CONNECT: {
-//         mirua_connect(ctx, node);
-//     } break;
-//     case TOKEN_LIST_DIRS: {
-//         mirua_exploreNodes(ctx, node);
-//         mirua_print_current_node(ctx);
-//         mirua_print_current_children(ctx);
-//
-//     } break;
-//     case TOKEN_DISCONNECT: {
-//         UA_Client_disconnect(ctx->client);
-//     } break;
-//     case TOKEN_BROWSE: {
-//         UA_NodeId browseNode = UA_NODEID_NUMERIC(5, 100000);
-//
-//         // UA_StatusCode status =
-//         UA_Client_forEachChildNodeCall(ctx->client, browseNode, mirua_cb_printNodeEx,
-//         ctx->client); mirua_print_node_path(ctx->client, &browseNode); UA_NodeId nodeId =
-//         UA_NODEID_STRING(5, "::Program1:transform"); mirua_printNodeDataType(ctx->client,
-//         &nodeId);
-//         // or UA_NodeId nodeId = UA_NODEID_NUMERIC(5, 100000);
-//         mirua_print_node_value_json(ctx->client, &nodeId);
-//         // TODO: epxlore further with UA_Client_getRemoteDataTypes and see if it reads the
-//         transforms datatype which
-//         // is sturcture
-//         //  ->> printing
-//         UA_NodeId_clear(&browseNode);
-//     } break;
-//     case TOKEN_CURRENT: {
-//         char* buf = dbg_getbuf(0);
-//         size_t bufsize = dbg_buf_size();
-//         mirua_to_string_nodeIdEx(buf, bufsize, ctx->client, &ctx->currentNode);
-//         printf("[CUREENT NODE] - %s\n", buf);
-//
-//         buildNodeIdTree(ctx->client, &ctx->currentNode);
-//
-//     } break;
-//
-//     case TOKEN_NAVIGATE_DOWN: {
-//         printf("NAVIGATE_DOWN triggered\n");
-//         size_t idx = 0;
-//         const char* param0 = NULL;
-//         const char* param1 = NULL;
-//
-//         if (node->child_count > 0 && node->children[0]->type == AST_PARAMETER) {
-//             param0 = node->children[0]->data.parameter.value;
-//         }
-//         if (node->child_count > 1 && node->children[1]->type == AST_PARAMETER) {
-//             param1 = node->children[1]->data.parameter.value;
-//         }
-//
-//         char* endptr;
-//         long parsedIdx = param0 ? strtol(param0, &endptr, 10) : -1;
-//         if (!param0 || endptr == param0 || *endptr != '\0') {
-//             log_warn("[NAVIGATE] - Invalid child index: %s", param0 ? param0 : "(null)");
-//         } else if (!param1 || strlen(param1) == 0) {
-//             idx = (size_t)parsedIdx;
-//             if (idx < ctx->currentChildren.size) {
-//                 UA_NodeId_clear(&ctx->currentNode);
-//                 UA_NodeId_copy(&ctx->currentChildren.nodeIds[idx], &ctx->currentNode);
-//                 mirua_history_addToHistory(&ctx->history, &ctx->currentNode);
-//                 mirua_exploreNodes(ctx, NULL);
-//             } else {
-//                 log_warn("[NAVIGATE] - Invalid child index: %zu", idx);
-//             }
-//         } else if (strcmp(param1, "datatype") == 0 || strcmp(param1, "d") == 0) {
-//             idx = (size_t)parsedIdx;
-//             if (idx < ctx->currentChildren.size) {
-//                 UA_NodeId_clear(&ctx->currentNode);
-//                 UA_NodeId datatypeNodeId;
-//                 UA_NodeId_init(&datatypeNodeId);
-//                 UA_Client_readDataTypeAttribute(ctx->client,
-//                 ctx->currentChildren.nodeIds[idx], &datatypeNodeId);
-//                 UA_NodeId_copy(&datatypeNodeId, &ctx->currentNode);
-//                 mirua_history_addToHistory(&ctx->history, &ctx->currentNode);
-//                 mirua_exploreNodes(ctx, NULL);
-//             } else {
-//                 log_warn("[NAVIGATE] - Invalid child index: %zu", idx);
-//             }
-//         } else {
-//             log_warn("[NAVIGATE] - Unknown parameter combination: %s, %s", param0, param1);
-//         }
-//
-//         mirua_print_current_node(ctx);
-//         mirua_print_current_children(ctx);
-//     } break;
-//     case TOKEN_NAVIGATE_UP: {  // TODO: currently doesnt go up to the start node. histroy not
-//     being updated
-//                                // initally. maybe initialize as root folder in ctx?
-//         if (mirua_history_goBack(&ctx->history)) {
-//             ctx->currentNode = ctx->history.nodeIds[ctx->history.count - 1];
-//             mirua_exploreNodes(ctx, NULL);
-//         }
-//
-//         mirua_print_current_children(ctx);
-//         break;
-//     }
-//     case TOKEN_SETTINGS: {
-//         printf("Available settings\n");
-//         printf("Current print level: [%i]\n", ctx->nodeIdPrintLevel);
-//         printf("[ROOT NODE] - ");
-//         ast_print_debug_node(node);
-//         printf("\n");
-//         for (size_t i = 0; i < node->child_count;
-//              ++i) {  // TODO: add handling for set nodeidprintlevel 1 -> currently just takes
-//              1 number and changes
-//                      // it not dynami,c
-//             ASTNode* child = node->children[i];
-//             char* end;
-//             int val = -1;
-//             val = strtol(child->data.parameter.value, &end, 10);
-//             if (child->command_type == TOKEN_NUMBER) {
-//                 if (val >= 0 && val <= 3) {
-//                     ctx->nodeIdPrintLevel = val;
-//                     printf("NodeIdPrintLevel set to %i\n", val);
-//                     break;
-//                 }
-//             }
-//             printf("[CHILD NDOE {%zu}] Node: ", i);
-//             ast_print_debug_node(node);
-//             printf("[TOKEN TYPE]: %s\n", lexer_to_string_tokentype(child->command_type));
-//         }
-//     } break;
-//     case TOKEN_HISTORY: {
-//         char* buf = dbg_getbuf(0);
-//         size_t bufsize = dbg_buf_size();
-//         switch (
-//             ctx->nodeIdPrintLevel) {  // TODO:: ADD to context "NodeId_print_func" to get rid
-//             of multiple switches case 0: { } break; case 1: { } break; case 2: { } break;
-//         }
-//         mirua_history_to_string(buf, bufsize, ctx->client, &ctx->history,
-//         mirua_to_string_nodeId); printf("[HISTORY]:\n %s\n", buf);
-//     } break;
-//     case TOKEN_SAVE: {
-
-//     } break;
-//     default: {
-//     } break;
-//         // case TOKEN_CONNECT: {} break;
-//         // case TOKEN_CONNECT: {} break;
-//         // case TOKEN_CONNECT: {} break;
-//         // case TOKEN_CONNECT: {} break;
-// }
-// }
 void mirua_save(MiruaContext* ctx, int idx, int start, int end) {
+    if (!ctx->connected) {
+        log_error("UA_Client not connected!");
+        return;
+    }
     // GETTING RANGE OF NODES
     mirua_t_NodeList subset;
     bool rangeb = false;
@@ -664,6 +485,11 @@ bool mirua_node_exists(UA_Client* client, const UA_NodeId* node) {
     }
 }
 void mirua_exploreNodes(MiruaContext* ctx, const char* node, int idx) {
+    if (!ctx->connected) {
+        log_error("UA_Client not connected to server");
+        return;
+    }
+
     if (ctx->currentChildren.nodeIds == NULL || ctx->currentChildren.size == 0) {
         mirua_explore_children(ctx, &ctx->currentChildren, &ctx->config.defaultRoot);
         UA_NodeId_copy(&ctx->config.defaultRoot, &ctx->currentNode.nodeid);
@@ -708,6 +534,11 @@ void mirua_exploreNodes(MiruaContext* ctx, const char* node, int idx) {
     }
 }
 int mirua_navigate_down(MiruaContext* ctx, size_t idx) {
+    if (!ctx->connected) {
+        log_error("UA_Client not connected to server");
+        return -1;
+    }
+
     log_trace("NAVIGATE_DOWN triggered\n");
 
     if (idx >= ctx->currentChildren.size) {
@@ -736,6 +567,11 @@ int mirua_navigate_down(MiruaContext* ctx, size_t idx) {
     return 0;
 }
 int mirua_navigate_up(MiruaContext* ctx) {
+    if (!ctx->connected) {
+        log_error("UA_Client not connected to server");
+        return -1;
+    }
+
     if (mirua_history_goBack(&ctx->history)) {
         ctx->currentNode = ctx->history.nodeIds[ctx->history.count - 1];
         mirua_explore_children(ctx, &ctx->currentChildren, &ctx->currentNode.nodeid);
@@ -1390,6 +1226,8 @@ void mirua_config_set_by_idx_ctx(MiruaContext* ctx, size_t idx, const char* valu
 }
 
 void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value) {
+    // TODO: Make generic setter for config and also add validation for the input
+
     if (idx >= mirua_config_mapping_count) return;
 
     const MiruaConfigMapping* map = &mirua_config_mappings[idx];
