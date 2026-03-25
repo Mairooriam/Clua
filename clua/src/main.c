@@ -128,11 +128,67 @@ void cmd_cd_up(MiruaContext* ctx, const char* args) {
     (void)ctx;
     (void)args;
     // TODO: implement cd..
-    printf("cd.. command not yet implemented\n");
+    mirua_navigate_up(ctx);
 }
 
 void cmd_save(MiruaContext* ctx, const char* args) {
-    printf("save not implemented\n");
+    if (strlen(args) == 0) {
+        printf("Usage: save <start> [end]\n");
+        printf("       save <index>        - save single node\n");
+        printf("       save <start> <end>  - save range of nodes\n");
+        return;
+    }
+
+    char start_str[32], end_str[32];
+    int parsed = sscanf(args, "%31s %31s", start_str, end_str);
+    
+    if (parsed < 1) {
+        printf("Error: Invalid arguments\n");
+        return;
+    }
+
+    // Parse start index
+    char* endptr;
+    long start = strtol(start_str, &endptr, 10);
+    if (*endptr != '\0' || endptr == start_str) {
+        printf("Error: Invalid start index '%s'\n", start_str);
+        return;
+    }
+
+    // Validate start index
+    if (start < 0) {
+        printf("Error: Index must be non-negative\n");
+        return;
+    }
+
+    // Check if it's a single node or range
+    if (parsed == 1) {
+        // Single node: use idx parameter
+        printf("Saving node %ld...\n", start);
+        mirua_save(ctx, (int)start, -1, -1);
+    } else {
+        // Range: parse end index
+        long end = strtol(end_str, &endptr, 10);
+        if (*endptr != '\0' || endptr == end_str) {
+            printf("Error: Invalid end index '%s'\n", end_str);
+            return;
+        }
+
+        if (end < 0) {
+            printf("Error: End index must be non-negative\n");
+            return;
+        }
+        
+        if (start > end) {
+            printf("Error: Start index must be <= end index\n");
+            return;
+        }
+
+        // Range: use start/end parameters
+        printf("Saving nodes from %ld to %ld...\n", start, end);
+        mirua_save(ctx, -1, (int)start, (int)end);
+    }
+
 }
 
 int main(void) {

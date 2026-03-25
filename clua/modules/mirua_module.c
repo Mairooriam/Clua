@@ -244,13 +244,13 @@ void mirua_save(MiruaContext* ctx, int idx, int start, int end) {
             }
 
             // FILTER
-            if (!mirua_filter_is_numeric_or_bool(ctx->client, node->nodeid)) {
-                log_warn(
-                    "[SAVE:FILTER] Ignoring node %.*s. Not numeric or bool.",
-                    (int)node->name.name.length,
-                    node->name.name.data);
-                continue;
-            }
+            // if (!mirua_filter_is_numeric_or_bool(ctx->client, node->nodeid)) {
+            //     log_warn(
+            //         "[SAVE:FILTER] Ignoring node %.*s. Not numeric or bool.",
+            //         (int)node->name.name.length,
+            //         node->name.name.data);
+            //     continue;
+            // }
 
             // STRUCTURES
             if (mirua_nodeId_is_structure(ctx->client, node->nodeid)) {
@@ -290,13 +290,13 @@ void mirua_save(MiruaContext* ctx, int idx, int start, int end) {
         }
 
         // FILTER
-        if (!mirua_filter_is_numeric_or_bool(ctx->client, node->nodeid)) {
-            log_warn(
-                "[SAVE:FILTER] ignoring node %.*s. Not numeric or bool.",
-                (int)node->name.name.length,
-                node->name.name.data);
-            return;
-        }
+        // if (!mirua_filter_is_numeric_or_bool(ctx->client, node->nodeid)) {
+        //     log_warn(
+        //         "[SAVE:FILTER] ignoring node %.*s. Not numeric or bool.",
+        //         (int)node->name.name.length,
+        //         node->name.name.data);
+        //     return;
+        // }
 
         // STRUCTURES
         if (mirua_nodeId_is_structure(ctx->client, node->nodeid)) {
@@ -2194,7 +2194,7 @@ static void mirua_tree_collect_values_recursive(mirua_t_NodeList* nodes, MiruaTr
             node->nodeid.name.name.data);
     }
 
-    // For structures and other types, recurse into children
+    // For structure s and other types, recurse into children
     if (node->children) {
         for (size_t i = 0; i < node->child_count; i++) {
             if (node->children[i]) {
@@ -2580,6 +2580,7 @@ bool mirua_nodeId_nodeClass_is(UA_Client* client, const UA_NodeId node, UA_NodeC
     UA_NodeClass_init(&class);
     UA_StatusCode status = UA_Client_readNodeClassAttribute(client, node, &class);
     if (status != UA_STATUSCODE_GOOD) {
+        log_error("UA_Client_readNodeClassAttribute returned != UA_STATUSCODE_GOOD");
         return false;
     }
 

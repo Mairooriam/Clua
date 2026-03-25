@@ -1,0 +1,40 @@
+cmake_minimum_required(VERSION 3.11)
+project(Clua C CXX)
+
+# Set C standard to C11
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+add_compile_definitions(_AMD64_)
+# Enable all warnings and sanitizers for GCC/Clang
+if(MSVC)
+    add_compile_options(/W4)
+else()
+    add_compile_options(
+        -Wall
+        -Wextra
+        -Wpedantic
+        -fdiagnostics-color=always
+        -Wno-newline-eof
+    )
+endif()
+
+find_package(open62541 REQUIRED)
+find_package(replxx REQUIRED)
+find_package(Threads REQUIRED)
+# Source files
+set(SOURCES
+    main.c
+    ../clua/src/log.c
+)
+
+# Executable
+add_executable(playground_main ${SOURCES})
+target_compile_definitions(playground_main PRIVATE LOG_USE_COLOR _CRT_SECURE_NO_WARNINGS)
+target_include_directories(playground_main PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(playground_main PRIVATE open62541::open62541 replxx::replxx Threads::Threads ws2_32 iphlpapi)
