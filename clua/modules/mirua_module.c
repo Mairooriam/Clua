@@ -151,7 +151,7 @@ void mirua_save(MiruaContext* ctx, int idx, int start, int end) {
             char new_filename[256];
             if (fgets(new_filename, sizeof(new_filename), stdin)) {
                 new_filename[strcspn(new_filename, "\n")] = '\0';
-                filename = strdup(new_filename);
+                filename = _strdup(new_filename);
                 if (!filename) {
                     log_error("[SAVE] Failed to allocate memory for filename");
                     mirua_free_nodeList(&subset);
@@ -303,7 +303,7 @@ MiruaContext* mirua_module_create(void) {
     //
     //      ctx->config.endpoint = endpoint;
     //  } else {
-    ctx->config.endpoint = strdup("opc.tcp://127.0.0.1:4840");
+    ctx->config.endpoint = _strdup("opc.tcp://127.0.0.1:4840");
     ctx->config.defaultRoot = UA_NODEID_NUMERIC(0, 85);
     ctx->config.output_path = "output.txt";
 
@@ -354,10 +354,10 @@ int mirua_connect(MiruaContext* ctx, const char* endpoint) {
         status = UA_Client_connect(ctx->client, endpoint);
         if (status == UA_STATUSCODE_GOOD) {
             free(ctx->config.endpoint);
-            ctx->config.endpoint = strdup(endpoint);
+            ctx->config.endpoint = _strdup(endpoint);
             log_trace("[CONNECT] - updated endpoint into config");
-        }else{
-          log_error("Connecting to server { %s } was not succesfull", endpoint);
+        } else {
+            log_error("Connecting to server { %s } was not succesfull", endpoint);
         }
     }
     log_info("Hello after !ctx->client");
@@ -412,22 +412,21 @@ int mirua_connect(MiruaContext* ctx, const char* endpoint) {
 
     return 1;
 }
-int mirua_disconnect(MiruaContext* ctx){
-  if (!ctx->connected) {
-    log_warn("Not connected to client. Cannot disconnect.");
-    return -1;
-  }
+int mirua_disconnect(MiruaContext* ctx) {
+    if (!ctx->connected) {
+        log_warn("Not connected to client. Cannot disconnect.");
+        return -1;
+    }
 
-
-  UA_StatusCode status = UA_Client_disconnect(ctx->client);
-  if (status != UA_STATUSCODE_GOOD) {
-    log_error("failed to disconnect client");
-    return -1;
-  }
-  log_info("Disconnect was successful");
-  UA_Client_delete(ctx->client);
-  ctx->connected = false;
-  return 1;
+    UA_StatusCode status = UA_Client_disconnect(ctx->client);
+    if (status != UA_STATUSCODE_GOOD) {
+        log_error("failed to disconnect client");
+        return -1;
+    }
+    log_info("Disconnect was successful");
+    UA_Client_delete(ctx->client);
+    ctx->connected = false;
+    return 1;
 }
 
 void mirua_explore_children(MiruaContext* ctx, mirua_t_NodeList* nodes, const UA_NodeId* node) {
@@ -1259,7 +1258,7 @@ void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value)
         case MIRUA_CONFIG_TYPE_STRING: {
             char** field = (char**)((char*)config + map->offset);
             free(*field);
-            *field = strdup(value);
+            *field = _strdup(value);
             break;
         }
         case MIRUA_CONFIG_TYPE_NODEID: {
@@ -1303,7 +1302,7 @@ void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value)
         case MIRUA_CONFIG_TYPE_FILE_OUTPUT_PATH: {
             char** field = (char**)((char*)config + map->offset);
             free(*field);
-            *field = strdup(value);
+            *field = _strdup(value);
         } break;
         default: {
             log_error("[CONFIG] Unknown config type %d for key '%s'", map->type, map->name);
@@ -1384,7 +1383,7 @@ void mirua_config_set_ctx(MiruaContext* ctx, const char* key, const char* value)
 static inline bool mirua_isvalid_filter_str(const char* str) {
     if (!str || strlen(str) == 0) return false;
 
-    char* copy = strdup(str);
+    char* copy = _strdup(str);
     char* token = strtok(copy, ",");
     while (token) {
         while (*token == ' ') token++;
@@ -1594,7 +1593,7 @@ uint32_t mirua_parse_filters(const char* filters_str) {
     uint32_t mask = 0;
     if (!filters_str || strlen(filters_str) == 0) return mask;
 
-    char* copy = strdup(filters_str);
+    char* copy = _strdup(filters_str);
     char* token = strtok(copy, ",");
     while (token) {
         while (*token == ' ') token++;
