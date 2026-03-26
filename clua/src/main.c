@@ -17,6 +17,8 @@ void cmd_main_change_to_config(MiruaContext* ctx, const char* args);
 void cmd_cd(MiruaContext* ctx, const char* args);
 void cmd_cd_up(MiruaContext* ctx, const char* args);
 void cmd_save(MiruaContext* ctx, const char* args);
+void cmd_disconnect(MiruaContext* ctx, const char* args);
+
 
 // config context commands
 void cmd_config_ls(MiruaContext* ctx, const char* args);
@@ -41,6 +43,7 @@ static const Command commands[] = {
     {"cd", "cd [idx] | cd <nodeid>", MIRUA_STATE_NORMAL, cmd_cd},
     {"cd..", "Go up one level", MIRUA_STATE_NORMAL, cmd_cd_up},
     {"save", "save <start> <end> | save <index>", MIRUA_STATE_NORMAL, cmd_save},
+    {"disconnect", "disconnect <Nothing>", MIRUA_STATE_NORMAL, cmd_disconnect},
 
     // Config context commands
     {"ls", "ls ?[idx]", MIRUA_STATE_CONFIG, cmd_config_ls},
@@ -121,6 +124,12 @@ void dispatch_command(const char* input, MiruaContext* ctx) {
 void cmd_connect(MiruaContext* ctx, const char* args) {
     const char* endpoint = strlen(args) > 0 ? args : "opc.tcp://127.0.0.1:4840";
     mirua_connect(ctx, endpoint);
+}
+
+void cmd_disconnect(MiruaContext* ctx, const char* args) {
+  (void)args;
+  mirua_disconnect(ctx);
+
 }
 
 void cmd_ls(MiruaContext* ctx, const char* args) {

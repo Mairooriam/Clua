@@ -11,6 +11,7 @@ void mirua_module_free(MiruaContext* ctx);
 
 // API
 int mirua_connect(MiruaContext* ctx, const char* endpoint);
+int mirua_disconnect(MiruaContext* ctx);
 void mirua_exploreNodes(MiruaContext* ctx, const char* node, int idx);
 int mirua_navigate_down(MiruaContext* ctx, size_t index);
 int mirua_navigate_up(MiruaContext* ctx);

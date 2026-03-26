@@ -336,12 +336,16 @@ int mirua_connect(MiruaContext* ctx, const char* endpoint) {
         UA_Client* client = UA_Client_new();
         if (client) {
             ctx->client = client;
+            log_trace("Client Created");
         } else {
             log_warn("[CONNECT] - failed to create client");
             return 0;
         }
     }
     UA_StatusCode status = -1;
+
+    log_info("hello before !ctx->client");
+
     if (!endpoint) {
         log_trace(
             "[CONNECT] - No endpoint supplied. Using config's endpoint: %s", ctx->config.endpoint);
@@ -352,8 +356,11 @@ int mirua_connect(MiruaContext* ctx, const char* endpoint) {
             free(ctx->config.endpoint);
             ctx->config.endpoint = strdup(endpoint);
             log_trace("[CONNECT] - updated endpoint into config");
+        }else{
+          log_error("Connecting to server { %s } was not succesfull", endpoint);
         }
     }
+    log_info("Hello after !ctx->client");
 
     if (status == UA_STATUSCODE_GOOD) {
         ctx->connected = true;
@@ -404,6 +411,23 @@ int mirua_connect(MiruaContext* ctx, const char* endpoint) {
     }
 
     return 1;
+}
+int mirua_disconnect(MiruaContext* ctx){
+  if (!ctx->connected) {
+    log_warn("Not connected to client. Cannot disconnect.");
+    return -1;
+  }
+
+
+  UA_StatusCode status = UA_Client_disconnect(ctx->client);
+  if (status != UA_STATUSCODE_GOOD) {
+    log_error("failed to disconnect client");
+    return -1;
+  }
+  log_info("Disconnect was successful");
+  UA_Client_delete(ctx->client);
+  ctx->connected = false;
+  return 1;
 }
 
 void mirua_explore_children(MiruaContext* ctx, mirua_t_NodeList* nodes, const UA_NodeId* node) {
