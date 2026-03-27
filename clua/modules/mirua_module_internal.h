@@ -136,6 +136,7 @@ void mirua_config_print_by_idx(MiruaContext* ctx, size_t idx);
 void mirua_config_print(const MiruaConfig* config);
 bool mirua_config_load_from_file(MiruaConfig* config, const char* filepath);
 void mirua_config_print_enabled_data_types(uint32_t mask);
+bool mirua_config_validate_endpoint(const char* endpoint);
 uint32_t mirua_parse_filters(const char* filters_str);
 extern const MiruaConfigMapping configMapping[];
 extern const size_t mirua_config_mapping_count;
