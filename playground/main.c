@@ -8,97 +8,7 @@
 #include <string.h>
 
 #include "../clua/src/log.h"
-
-// int mirua_connect(UA_Client* client, const char* endpoint) {
-// if (ctx->connected) {
-//     log_trace("[CONNECT] - already connected!");
-//     return 0;
-// }
-
-// TODO: client should be created elsewhere
-//  if (!ctx->client) {
-//      UA_Client* client = UA_Client_new();
-//      if (client) {
-//          ctx->client = client;
-//      } else {
-//          log_warn("[CONNECT] - failed to create client");
-//          return 0;
-//      }
-//  }
-//  UA_StatusCode status = -1;
-//  if (!endpoint) {
-//      log_trace(
-//          "[CONNECT] - No endpoint supplied. Using config's endpoint: %s",
-//          ctx->config.endpoint);
-//      status = UA_Client_connect(ctx->client, ctx->config.endpoint);
-//  } else {
-//      status = UA_Client_connect(ctx->client, endpoint);
-//      if (status == UA_STATUSCODE_GOOD) {
-//          free(ctx->config.endpoint);
-//          ctx->config.endpoint = strdup(endpoint);
-//          log_trace("[CONNECT] - updated endpoint into config");
-//      }
-//  }
-
-// UA_StatusCode status = UA_Client_connect(client, endpoint);
-// if (status == UA_STATUSCODE_GOOD) {
-//     log_trace("[CONNECT] - updated endpoint into config");
-//
-//
-//
-// if (status == UA_STATUSCODE_GOOD) {
-//     ctx->connected = true;
-//     log_trace("[CONNECT] - Successfully connected to %s", ctx->config.endpoint);
-//
-//     // Load all unknown data types from server
-//     UA_DataTypeArray* customTypes = NULL;
-//     UA_StatusCode dtStatus = UA_Client_getRemoteDataTypes(ctx->client, 0, NULL,
-//     &customTypes);
-//
-//     if (dtStatus != UA_STATUSCODE_GOOD) {
-//         log_warn("[CONNECT] Failed to get remote data types: %s",
-//         UA_StatusCode_name(dtStatus));
-//     } else {
-//         if (customTypes && customTypes->typesSize > 0) {
-//             log_trace("[CONNECT] Loaded %zu custom data types", customTypes->typesSize);
-//
-//             // ctx->customDataTypes = customTypes;
-//         } else {
-//             log_trace("[CONNECT] No custom data types found");
-//         }
-//     }
-//     UA_NodeId_copy(&ctx->config.defaultRoot, &ctx->currentNode.nodeid);
-//
-//     // Try to browse defaultRoot
-//     mirua_t_NodeList testChildren = {0};
-//     mirua_init_nodeList(&testChildren, 128);
-//     mirua_explore_children(ctx, &testChildren, &ctx->config.defaultRoot);
-//
-//     if (testChildren.size == 0) {
-//         log_warn(
-//             "[CONNECT] - config.defaultRoot not found, falling back to OPC UA default root");
-//         ctx->config.defaultRoot = UA_NODEID_NUMERIC(0, 85);  // OPC UA standard root folder
-//         UA_NodeId_copy(&ctx->config.defaultRoot, &ctx->currentNode.nodeid);
-//         mirua_free_nodeList(&testChildren);
-//         mirua_init_nodeList(&testChildren, 128);
-//         mirua_explore_children(ctx, &testChildren, &ctx->config.defaultRoot);
-//     }
-//
-//     mirua_free_nodeList(&testChildren);
-//
-//     mirua_history_addToHistory(&ctx->history, &ctx->currentNode);
-//     return 1;
-// } else {
-//     log_warn(
-//         "[CONNECT] - to {%s} was not successful", endpoint ? endpoint :
-//         ctx->config.endpoint);
-//     UA_Client_delete(ctx->client);
-//     ctx->client = NULL;
-//     return 0;
-// }
-//
-// return 1;
-// }
+#include "winuser.h"
 
 int main(int argc, char const* argv[]) {
     if (argc < 2) {
@@ -162,6 +72,8 @@ int main(int argc, char const* argv[]) {
         }
 
         printf("Running Test 3...\n");
+    } else if (strcmp(argv[1], "4") == 0) {
+        HANDLE clipHandle = GetClipboardData()
     } else {
         printf("Unknown test: %s\n", argv[1]);
         printf("Available tests: test1, test2, test3\n");

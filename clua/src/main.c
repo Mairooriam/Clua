@@ -18,7 +18,7 @@ void cmd_cd(MiruaContext* ctx, const char* args);
 void cmd_cd_up(MiruaContext* ctx, const char* args);
 void cmd_save(MiruaContext* ctx, const char* args);
 void cmd_disconnect(MiruaContext* ctx, const char* args);
-
+void cmd_copy(MiruaContext* ctx, const char* args);
 
 // config context commands
 void cmd_config_ls(MiruaContext* ctx, const char* args);
@@ -44,6 +44,7 @@ static const Command commands[] = {
     {"cd..", "Go up one level", MIRUA_STATE_NORMAL, cmd_cd_up},
     {"save", "save <start> <end> | save <index>", MIRUA_STATE_NORMAL, cmd_save},
     {"disconnect", "disconnect <Nothing>", MIRUA_STATE_NORMAL, cmd_disconnect},
+    {"copy", "copy <nothing>", MIRUA_STATE_NORMAL, cmd_copy},  // TODO: add more ways to copy?
 
     // Config context commands
     {"ls", "ls ?[idx]", MIRUA_STATE_CONFIG, cmd_config_ls},
@@ -127,9 +128,8 @@ void cmd_connect(MiruaContext* ctx, const char* args) {
 }
 
 void cmd_disconnect(MiruaContext* ctx, const char* args) {
-  (void)args;
-  mirua_disconnect(ctx);
-
+    (void)args;
+    mirua_disconnect(ctx);
 }
 
 void cmd_ls(MiruaContext* ctx, const char* args) {
@@ -194,6 +194,10 @@ void cmd_cd_up(MiruaContext* ctx, const char* args) {
     (void)args;
     // TODO: implement cd..
     mirua_navigate_up(ctx);
+}
+
+void cmd_copy(MiruaContext* ctx, const char* args) {
+    // TODO: implement platform specific stuff to copy to clipboard Q1  Q!2A~
 }
 
 void cmd_save(MiruaContext* ctx, const char* args) {

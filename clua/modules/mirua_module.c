@@ -420,11 +420,11 @@ int mirua_disconnect(MiruaContext* ctx) {
 
     UA_StatusCode status = UA_Client_disconnect(ctx->client);
     if (status != UA_STATUSCODE_GOOD) {
-        log_error("failed to disconnect client");
-        return -1;
+        log_error("Failed to disconnect client, continuing to deletion.");
     }
     log_info("Disconnect was successful");
     UA_Client_delete(ctx->client);
+    ctx->client = NULL;
     ctx->connected = false;
     return 1;
 }
