@@ -344,8 +344,6 @@ int mirua_connect(MiruaContext* ctx, const char* endpoint) {
     }
     UA_StatusCode status = -1;
 
-    log_info("hello before !ctx->client");
-
     if (!endpoint) {
         log_trace(
             "[CONNECT] - No endpoint supplied. Using config's endpoint: %s", ctx->config.endpoint);
@@ -1301,8 +1299,12 @@ void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value)
 
         case MIRUA_CONFIG_TYPE_FILE_OUTPUT_PATH: {
             char** field = (char**)((char*)config + map->offset);
-            free(*field);
-            *field = _strdup(value);
+            if (mirua_config_validate_endpoint(value)) {
+                free(*field);
+                *field = _strdup(value);
+            } else {
+                log_error("Validating endpoint failed.");
+            }
         } break;
         default: {
             log_error("[CONFIG] Unknown config type %d for key '%s'", map->type, map->name);
@@ -1310,6 +1312,12 @@ void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value)
         }
     }
 }
+bool mirua_config_validate_endpoint(const char* endpoint) {
+    if (!endpoint) return false;
+    return strncmp(endpoint, "opc.tcp://", 10) == 0 ||
+           strncmp(endpoint, "opc.https://", 12) == 0;
+}
+
 void mirua_config_print_by_idx(MiruaContext* ctx, size_t idx) {
     if (idx >= mirua_config_mapping_count) {
         log_warn("[CONFIG] Index %zu out of range", idx);
