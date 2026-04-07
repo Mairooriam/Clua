@@ -3,7 +3,7 @@
 
 #include "platform_types.h"
 
-size_t MirFileSize(const char* path);
+MirFileResult MirFileSize(MirFile* file, size_t* size);
 MirFileResult MirFileOpen(const char* path, MirFile* out, MirFileAccess accesType);
 MirFileResult MirFileWrite(MirFile* handle, const void* data, size_t size, size_t* bytesWritten);
 void MirFileClose(MirFile* handle);

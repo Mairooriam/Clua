@@ -1,8 +1,11 @@
 #include "wCore.h"
 
 #include <assert.h>
+#include <fileapi.h>
 #include <handleapi.h>
+#include <minwindef.h>
 #include <stdio.h>
+#include <winnt.h>
 
 #include "../platform.h"
 #include "../platform_types.h"
@@ -151,4 +154,16 @@ void MirFileClose(MirFile* handle) {
         CloseHandle((HANDLE)handle->_handle);
         handle->_handle = NULL;
     }
+}
+MirFileResult MirFileSize(MirFile* file, size_t* size) {
+    if (!file->_handle) return MIR_FILE_ERR_INVALID_HANDLE;
+    LARGE_INTEGER fileSize;
+
+    BOOL success = GetFileSizeEx(file->_handle, &fileSize);
+    // TODO: GetLastError for additional error information
+    if (!success) {
+        return MIR_FILE_ERR;
+    }
+    *size = (size_t)fileSize.QuadPart;
+    return MIR_FILE_OK;
 }

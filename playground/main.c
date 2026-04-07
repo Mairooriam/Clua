@@ -73,14 +73,29 @@ int main(int argc, char const* argv[]) {
 
         printf("Running Test 3...\n");
     } else if (strcmp(argv[1], "4") == 0) {
-        // testing platform abstraction layer
+        // TODO: proper tests when!?
         MirFile file = {0};
-        MirFileResult result = MirFileOpen("test.txt", &file, MIR_FILE_ACCESS_READ);
+        MirFileResult result = MirFileOpen("test.txt", &file, MIR_FILE_ACCESS_APPEND);
         if (result != MIR_FILE_OK) {
-            printf("Error opening file");
+            printf("Error opening file\n");
+            return 1;
         }
 
-        // HANDLE clipHandle = GetClipboardData()
+        const char* data = "Appending this line.\n";
+        size_t bytesWritten;
+        result = MirFileWrite(&file, data, strlen(data), &bytesWritten);
+        if (result != MIR_FILE_OK) {
+            printf("Error writing to file\n");
+        } else {
+            size_t fileSize = 0;
+            if (MirFileSize(&file, &fileSize) != MIR_FILE_OK) {
+                printf("Error in reading file Size");
+            }
+            printf("wrote to file %s, bytes:%zu, size:%zu", "test.txt", bytesWritten, fileSize);
+        }
+
+        MirFileClose(&file);
+
     } else {
         printf("Unknown test: %s\n", argv[1]);
         printf("Available tests: test1, test2, test3\n");
