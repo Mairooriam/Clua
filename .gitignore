@@ -2,3 +2,4 @@
 .cache
 deps/build
 influx/telegraf.conf
+compile_commands.json
