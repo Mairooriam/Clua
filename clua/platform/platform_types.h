@@ -1,0 +1,24 @@
+#pragma once
+
+typedef enum {
+    MIR_FILE_OK = 0,
+    MIR_FILE_ERR_NOT_FOUND,
+    MIR_FILE_ERR_ACCESS_DENIED,
+    MIR_FILE_ERR_INVALID_HANDLE,
+    MIR_FILE_ERR_WRITE_FAILED,
+    MIR_FILE_ERR_READ_FAILED,
+    MIR_FILE_ERR_HANDLE_CREATION_FAILED,
+    MIR_FILE_ERR_UNSUPPORTED_ACCESS,
+} MirFileResult;
+
+typedef enum {
+    MIR_FILE_ACCESS_READ,
+    MIR_FILE_ACCESS_WRITE,
+    MIR_FILE_ACCESS_APPEND,
+    MIR_FILE_ACCESS_READ_WRITE,
+} MirFileAccess;
+
+typedef struct {
+    void* _handle;
+    MirFileAccess type;
+} MirFile;
