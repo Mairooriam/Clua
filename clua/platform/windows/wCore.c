@@ -82,24 +82,6 @@ bool wCore_dll_hasChanged(const char* sourcePath, const DLLHandle* dll) {
     return CompareFileTime(&currentTime, &dll->lastWriteTime) != 0;
 }
 
-// ==================== FILE I/O ====================
-// MirFileResult wCore_file_write(
-//     MirFile* handle, const void* data, size_t size, size_t* bytesWritten) {
-//     if (!handle->internal) return MIR_FILE_ERR_INVALID_HANDLE;
-//     DWORD written;
-//     if (!WriteFile((HANDLE)handle->internal, data, (DWORD)size, &written, NULL))
-//         return MIR_FILE_ERR_WRITE_FAILED;
-//     if (bytesWritten) *bytesWritten = written;
-//     return MIR_FILE_OK;
-// }
-//
-// void wCore_file_close(MirFile* handle) {
-//     if (handle->internal) {
-//         CloseHandle((HANDLE)handle->internal);
-//         handle->internal = NULL;  // guard against double close
-//     }
-// }
-
 MirFileResult MirFileOpen(const char* path, MirFile* out, MirFileAccess accessType) {
     DWORD desiredAccess = 0;
     DWORD creationDisposition = 0;

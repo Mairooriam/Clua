@@ -16,10 +16,6 @@ uint64_t combine_u32_u32(DWORD low, DWORD high);
 // ==================== FILE I/O ====================
 FILETIME wCore_file_get_lastWriteTime(const char* filename);
 void wCore_file_FiletimeToString(char* str, size_t bufsize, FILETIME ft);
-// MirFileResult wCore_file_open_write(const char* path, MirFile* out);
-// MirFileResult wCore_file_write(
-//     MirFile* handle, const void* data, size_t size, size_t* bytesWritten);
-// void wCore_file_close(MirFile* handle);
 // ==================== CLIPBOARD ====================
 // https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-reference
 // https://learn.microsoft.com/en-us/windows/win32/dataxchg/using-the-clipboard?source=recommendations
