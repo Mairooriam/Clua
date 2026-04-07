@@ -123,7 +123,7 @@ void dispatch_command(const char* input, MiruaContext* ctx) {
 
 // Command handlers
 void cmd_connect(MiruaContext* ctx, const char* args) {
-    const char* endpoint = strlen(args) > 0 ? args : "opc.tcp://127.0.0.1:4840";
+    const char* endpoint = strlen(args) > 0 ? args : ctx->config.endpoint;
     mirua_connect(ctx, endpoint);
 }
 
