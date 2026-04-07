@@ -73,7 +73,7 @@ int main(int argc, char const* argv[]) {
 
         printf("Running Test 3...\n");
     } else if (strcmp(argv[1], "4") == 0) {
-        HANDLE clipHandle = GetClipboardData()
+        // HANDLE clipHandle = GetClipboardData()
     } else {
         printf("Unknown test: %s\n", argv[1]);
         printf("Available tests: test1, test2, test3\n");
