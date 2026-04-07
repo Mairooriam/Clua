@@ -7,8 +7,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../clua/platform/platform.h"
 #include "../clua/src/log.h"
-#include "winuser.h"
 
 int main(int argc, char const* argv[]) {
     if (argc < 2) {
@@ -73,6 +73,13 @@ int main(int argc, char const* argv[]) {
 
         printf("Running Test 3...\n");
     } else if (strcmp(argv[1], "4") == 0) {
+        // testing platform abstraction layer
+        MirFile file = {0};
+        MirFileResult result = MirFileOpen("test.txt", &file, MIR_FILE_ACCESS_READ);
+        if (result != MIR_FILE_OK) {
+            printf("Error opening file");
+        }
+
         // HANDLE clipHandle = GetClipboardData()
     } else {
         printf("Unknown test: %s\n", argv[1]);
