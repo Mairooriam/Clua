@@ -29,6 +29,7 @@ find_package(Threads REQUIRED)
 set(SOURCES
     main.c
     ../clua/src/log.c
+    ../clua/platform/windows/wCore.c #TODO: make into library
 )
 
 # Executable
