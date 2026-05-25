@@ -4,10 +4,36 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <threads.h>
 
 #include "log.h"
 #include "mirua_module.h"
 
+static volatile int g_running = 1;
+static mtx_t log_mutex;
+static mtx_t client_mutex;
+static void log_lock_fn(bool lock, void* udata) {
+    if (lock)
+        mtx_lock((mtx_t*)udata);
+    else
+        mtx_unlock((mtx_t*)udata);
+}
+
+int iterate_thread(void* ctx) {
+    time_t last_log = 0;
+    while (g_running) {
+        mtx_lock(&client_mutex);
+        mirua_client_iterate(ctx, 100);
+        mtx_unlock(&client_mutex);
+        log_trace("iterate_thread running");
+
+        time_t now = time(NULL);
+        if (now - last_log >= 2) {
+            last_log = now;
+        }
+    }
+    return 0;
+}
 // Forward declarations for command handlers
 void cmd_connect(MiruaContext* ctx, const char* args);
 void cmd_ls(MiruaContext* ctx, const char* args);
@@ -121,7 +147,8 @@ void dispatch_command(const char* input, MiruaContext* ctx) {
 
 // Command handlers
 void cmd_connect(MiruaContext* ctx, const char* args) {
-    const char* endpoint = strlen(args) > 0 ? args : ctx->config.endpoint;
+    const char* endpoint = strlen(args) > 0 ? args : mirua_config_get_current_endpoint(ctx);
+    log_info("endpoint:%s", endpoint);
     mirua_connect(ctx, endpoint);
 }
 
@@ -195,6 +222,9 @@ void cmd_cd_up(MiruaContext* ctx, const char* args) {
 }
 
 void cmd_copy(MiruaContext* ctx, const char* args) {
+    (void)ctx;
+    (void)args;
+
     // TODO: implement platform specific stuff to copy to clipboard Q1  Q!2A~
 }
 
@@ -224,6 +254,12 @@ int main(void) {
     // Set autocomplete callback
     replxx_set_completion_callback(replxx, completion_callback, ctx);
 
+    thrd_t t;
+    mtx_init(&log_mutex, mtx_plain);
+    mtx_init(&client_mutex, mtx_plain);
+    log_set_lock(log_lock_fn, &log_mutex);
+    thrd_create(&t, iterate_thread, ctx);
+
     while (1) {
         const char* input = replxx_input(replxx, "mirwiz> ");
         if (!input) {
@@ -240,10 +276,16 @@ int main(void) {
             break;
         }
 
+        mtx_lock(&client_mutex);
         dispatch_command(input, ctx);
+        mtx_unlock(&client_mutex);
         printf("\n");
     }
 
+    g_running = 0;
+    thrd_join(t, NULL);
+    mtx_destroy(&log_mutex);
+    mtx_destroy(&client_mutex);
     replxx_end(replxx);
     mirua_module_free(ctx);
     return 0;

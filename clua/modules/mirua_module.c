@@ -289,6 +289,11 @@ MiruaFilterType mirua_filter_parse_type(const char* str) {
         return MIRUA_FILTER_INVALID;
     }
 }
+void mirua_client_iterate(MiruaContext* ctx, uint32_t timeout) {
+    if (ctx->connected) {
+        UA_Client_run_iterate(ctx->client, timeout);
+    }
+}
 
 MiruaContext* mirua_module_create(void) {
     MiruaContext* ctx = malloc(sizeof(MiruaContext));
@@ -320,8 +325,11 @@ void mirua_module_free(MiruaContext* ctx) {
     UA_Client_delete(ctx->client);
     UA_ClientConfig_delete(ctx->ua_config);
 }
-
+const char* mirua_config_get_current_endpoint(MiruaContext* ctx) {
+    return ctx->config.endpoint;
+}
 int mirua_connect(MiruaContext* ctx, const char* endpoint) {
+    log_info("Hello from connect: ", endpoint);
     // if (validEndpoint()) //TODO: checking for valid endpoint
     // {
     //     ctx->config.endpoint = endpoint;
@@ -351,14 +359,14 @@ int mirua_connect(MiruaContext* ctx, const char* endpoint) {
     } else {
         status = UA_Client_connect(ctx->client, endpoint);
         if (status == UA_STATUSCODE_GOOD) {
-            free(ctx->config.endpoint);
-            ctx->config.endpoint = _strdup(endpoint);
+            char* new_endpoint = _strdup(endpoint); 
+            free(ctx->config.endpoint);             
+            ctx->config.endpoint = new_endpoint;     
             log_trace("[CONNECT] - updated endpoint into config");
         } else {
             log_error("Connecting to server { %s } was not succesfull", endpoint);
         }
     }
-    log_info("Hello after !ctx->client");
 
     if (status == UA_STATUSCODE_GOOD) {
         ctx->connected = true;
