@@ -90,7 +90,7 @@ void completion_callback(
     // Only complete if we're at the beginning (first word = command)
     if (word_start == prefix) {
         for (size_t i = 0; i < COMMAND_COUNT; ++i) {
-            if (commands[i].context == ctx->state) {
+            if (commands[i].context == mirua_state_get(ctx)) {
                 if (strncmp(commands[i].name, word_start, word_len) == 0) {
                     replxx_add_completion(completions, commands[i].name);
                 }
@@ -107,7 +107,7 @@ void dispatch_command(const char* input, MiruaContext* ctx) {
 
     // Find and execute command
     for (size_t i = 0; i < COMMAND_COUNT; ++i) {
-        if (commands[i].context == ctx->state) {
+        if (commands[i].context == mirua_state_get(ctx)) {
             if (strcmp(cmd, commands[i].name) == 0) {
                 const char* args_str = (args_parsed >= 2) ? arg : "";
                 commands[i].handler(ctx, args_str);
@@ -144,7 +144,8 @@ void cmd_config_ls(MiruaContext* ctx, const char* args) {
             mirua_config_print_by_idx(ctx, index);
             printf("Hello world");
         } else {
-            log_error("Invalid input. { %s }", get_command("ls", ctx->state)->description);
+            log_error(
+                "Invalid input. { %s }", get_command("ls", mirua_state_get(ctx))->description);
         }
     }
 }
@@ -155,10 +156,10 @@ void cmd_config_edit(MiruaContext* ctx, const char* args) {
     char value[128];
 
     if (sscanf(args, "%d %127[^\n]", &index, value) != 2) {
-        log_error("Invalid input. { %s }", get_command("edit", ctx->state)->description);
+        log_error("Invalid input. { %s }", get_command("edit", mirua_state_get(ctx))->description);
     }
 
-    mirua_config_set_by_idx(&ctx->config, index, value);
+    mirua_config_set_by_idx_ctx(ctx, index, value);
 }
 
 void cmd_main_change_to_config(MiruaContext* ctx, const char* args) {
@@ -174,13 +175,13 @@ void cmd_config_change_to_main(MiruaContext* ctx, const char* args) {
 void cmd_cd(MiruaContext* ctx, const char* args) {
     // TODO: add parsing for nodeid
     if (strlen(args) == 0) {
-        log_info("Invalid input. %s", get_command("cd", ctx->state)->description);
+        log_info("Invalid input. %s", get_command("cd", mirua_state_get(ctx))->description);
         return;
     }
 
     int index;
     if (sscanf(args, "%d", &index) != 1) {
-        log_info("Invalid input. %s", get_command("cd", ctx->state)->description);
+        log_info("Invalid input. %s", get_command("cd", mirua_state_get(ctx))->description);
     } else {
         mirua_navigate_down(ctx, index);
     }
@@ -199,7 +200,7 @@ void cmd_copy(MiruaContext* ctx, const char* args) {
 
 void cmd_save(MiruaContext* ctx, const char* args) {
     if (strlen(args) == 0) {
-        log_info("Invalid input. %s", get_command("save", ctx->state)->description);
+        log_info("Invalid input. %s", get_command("save", mirua_state_get(ctx))->description);
         return;
     }
 
@@ -210,7 +211,7 @@ void cmd_save(MiruaContext* ctx, const char* args) {
     } else if (parsed == 2) {
         mirua_save(ctx, -1, idx1, idx2);
     } else {
-        log_info("Invalid input. %s", get_command("save", ctx->state)->description);
+        log_info("Invalid input. %s", get_command("save", mirua_state_get(ctx))->description);
     }
 }
 

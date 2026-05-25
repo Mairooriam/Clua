@@ -22,4 +22,5 @@ void mirua_state_change(MiruaContext* ctx, MiruaState newState);
 
 void mirua_config_set(MiruaConfig* config, const char* key, const char* value);
 void mirua_config_print_ctx(MiruaContext* ctx);
+void mirua_config_print_by_idx(MiruaContext* ctx, size_t idx);
 void mirua_config_set_by_idx_ctx(MiruaContext* ctx, size_t idx, const char* value);

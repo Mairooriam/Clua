@@ -133,7 +133,6 @@ void mirua_config_set_ctx(MiruaContext* ctx, const char* key, const char* value)
 void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value);
 void mirua_config_print_field(
     const MiruaConfig* config, const MiruaConfigMapping* map, bool detailed);
-void mirua_config_print_by_idx(MiruaContext* ctx, size_t idx);
 void mirua_config_print(const MiruaConfig* config);
 bool mirua_config_load_from_file(MiruaConfig* config, const char* filepath);
 void mirua_config_print_enabled_data_types(uint32_t mask);
