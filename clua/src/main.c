@@ -7,8 +7,6 @@
 
 #include "log.h"
 #include "mirua_module.h"
-#include "mirua_module_internal.h"
-#include "mirua_types.h"
 
 // Forward declarations for command handlers
 void cmd_connect(MiruaContext* ctx, const char* args);
@@ -161,7 +159,6 @@ void cmd_config_edit(MiruaContext* ctx, const char* args) {
     }
 
     mirua_config_set_by_idx(&ctx->config, index, value);
-    printf("%s", args);
 }
 
 void cmd_main_change_to_config(MiruaContext* ctx, const char* args) {

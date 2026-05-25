@@ -1220,7 +1220,7 @@ int mirua_history_to_string(
 // CONFIG
 
 const MiruaConfigMapping mirua_config_mappings[] = {
-    {"endpoint", MIRUA_CONFIG_TYPE_STRING, offsetof(MiruaConfig, endpoint)},
+    {"endpoint", MIRUA_CONFIG_TYPE_ENDPOINT, offsetof(MiruaConfig, endpoint)},
     {"defaultRoot", MIRUA_CONFIG_TYPE_NODEID, offsetof(MiruaConfig, defaultRoot)},
     {"filter", MIRUA_CONFIG_TYPE_FILTER, offsetof(MiruaConfig, selectedDataTypeKinds)},
     {"filter_type", MIRUA_CONFIG_TYPE_FILTER_FUNC, offsetof(MiruaConfig, filterType)},
@@ -1299,11 +1299,16 @@ void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value)
 
         case MIRUA_CONFIG_TYPE_FILE_OUTPUT_PATH: {
             char** field = (char**)((char*)config + map->offset);
+            free(*field);
+            *field = _strdup(value);
+        }
+        case MIRUA_CONFIG_TYPE_ENDPOINT: {
+            char** field = (char**)((char*)config + map->offset);
             if (mirua_config_validate_endpoint(value)) {
                 free(*field);
                 *field = _strdup(value);
             } else {
-                log_error("Validating endpoint failed.");
+                log_error("Endpoint validation failed. Endpoint should start with opc.tcp://");
             }
         } break;
         default: {
@@ -1311,11 +1316,12 @@ void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value)
             break;
         }
     }
+
+    mirua_config_print(config);
 }
 bool mirua_config_validate_endpoint(const char* endpoint) {
     if (!endpoint) return false;
-    return strncmp(endpoint, "opc.tcp://", 10) == 0 ||
-           strncmp(endpoint, "opc.https://", 12) == 0;
+    return strncmp(endpoint, "opc.tcp://", 10) == 0 || strncmp(endpoint, "opc.https://", 12) == 0;
 }
 
 void mirua_config_print_by_idx(MiruaContext* ctx, size_t idx) {
@@ -1334,6 +1340,11 @@ void mirua_config_print_field(
         case MIRUA_CONFIG_TYPE_STRING: {
             char* field_value = *(char**)((char*)config + map->offset);
             printf("%s", field_value ? field_value : "(null)");
+        } break;
+        case MIRUA_CONFIG_TYPE_ENDPOINT: {
+            char* field_value = *(char**)((char*)config + map->offset);
+            printf("%s", field_value ? field_value : "(null)");
+
         } break;
         case MIRUA_CONFIG_TYPE_NODEID: {
             UA_NodeId* field = (UA_NodeId*)((char*)config + map->offset);
