@@ -8,7 +8,9 @@
 
 #include "log.h"
 #include "mirua_module.h"
-
+#include "open62541/client.h"
+#include "open62541/client_config_default.h"
+#include "open62541/client_subscriptions.h"
 static volatile int g_running = 1;
 static mtx_t log_mutex;
 static mtx_t client_mutex;
@@ -18,20 +20,83 @@ static void log_lock_fn(bool lock, void* udata) {
     else
         mtx_unlock((mtx_t*)udata);
 }
-
+static void handler_TheAnswerChanged(
+    UA_Client* client,
+    UA_UInt32 subId,
+    void* subContext,
+    UA_UInt32 monId,
+    void* monContext,
+    UA_DataValue* value) {
+    if (value->hasValue) {
+        printf("Subscription value changed: ");
+        // UA_Variant_print(&value->value);
+        printf("\n");
+    }
+}
 int iterate_thread(void* ctx) {
+    // Create a new raw open62541 client for testing
+    UA_Client* testClient = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(testClient));
+
+    UA_StatusCode retval = UA_Client_connect(testClient, "opc.tcp://192.168.0.10:4840");
+    if (retval != UA_STATUSCODE_GOOD) {
+        log_error("Test client failed to connect: %s", UA_StatusCode_name(retval));
+        UA_Client_delete(testClient);
+        return 1;
+    }
+
+    UA_NodeId nodeId = UA_NODEID_STRING(6, "::AsGlobalPV:Basetim");
+
+    // Create a subscription request
+    UA_CreateSubscriptionRequest subRequest = UA_CreateSubscriptionRequest_default();
+    UA_CreateSubscriptionResponse subResponse =
+        UA_Client_Subscriptions_create(testClient, subRequest, NULL, NULL, NULL);
+
+    if (subResponse.responseHeader.serviceResult == UA_STATUSCODE_GOOD) {
+        UA_UInt32 subId = subResponse.subscriptionId;
+
+        UA_MonitoredItemCreateRequest monRequest = UA_MonitoredItemCreateRequest_default(nodeId);
+
+        UA_MonitoredItemCreateResult monRet = UA_Client_MonitoredItems_createDataChange(
+            testClient,
+            subId,
+            UA_TIMESTAMPSTORETURN_BOTH,
+            monRequest,
+            NULL,
+            handler_TheAnswerChanged,
+            NULL);
+
+        if (monRet.statusCode == UA_STATUSCODE_GOOD) {
+            printf("Subscription created, subId=%u\n", subId);
+        } else {
+            printf("Failed to create monitored item: %s\n", UA_StatusCode_name(monRet.statusCode));
+        }
+    } else {
+        printf(
+            "Failed to create subscription: %s\n",
+            UA_StatusCode_name(subResponse.responseHeader.serviceResult));
+    }
+
     time_t last_log = 0;
     while (g_running) {
-        mtx_lock(&client_mutex);
-        mirua_client_iterate(ctx, 100);
-        mtx_unlock(&client_mutex);
-        log_trace("iterate_thread running");
+        // Test client iterate
+        UA_Client_run_iterate(testClient, 100);
+
+        // (Optional) Also run your main client logic if needed
+        // mtx_lock(&client_mutex);
+        // mirua_client_iterate(ctx, 100);
+        // mtx_unlock(&client_mutex);
+
+        // log_trace("iterate_thread running (test client)");
 
         time_t now = time(NULL);
         if (now - last_log >= 2) {
             last_log = now;
         }
     }
+
+    UA_Client_disconnect(testClient);
+    UA_Client_delete(testClient);
     return 0;
 }
 // Forward declarations for command handlers
