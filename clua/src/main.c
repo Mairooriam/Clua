@@ -11,6 +11,9 @@
 #include "open62541/client.h"
 #include "open62541/client_config_default.h"
 #include "open62541/client_subscriptions.h"
+
+#include <sqlite3.h>
+
 static volatile int g_running = 1;
 static mtx_t log_mutex;
 static mtx_t client_mutex;

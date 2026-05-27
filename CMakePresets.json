@@ -7,9 +7,17 @@
   },
   "configurePresets": [
     {
-      "name": "msvc-debug",
-      "description": "MSVC Debug Build",
+      "name": "base",
+      "hidden": true,
       "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "D:/DevTools/MYSYS2/mingw64"
+      }
+    },
+    {
+      "name": "msvc-debug",
+      "inherits": "base",
+      "description": "MSVC Debug Build",
       "binaryDir": "${sourceDir}/build/msvc-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -19,8 +27,8 @@
     },
     {
       "name": "msvc-release",
+      "inherits": "base",
       "description": "MSVC Release Build",
-      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/msvc-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -30,8 +38,8 @@
     },
     {
       "name": "mingw-debug",
+      "inherits": "base",
       "description": "MinGW Debug Build",
-      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/mingw-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -41,8 +49,8 @@
     },
     {
       "name": "mingw-release",
+      "inherits": "base",
       "description": "MinGW Release Build",
-      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/mingw-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -52,8 +60,8 @@
     },
     {
       "name": "clang-debug",
+      "inherits": "base",
       "description": "Clang-cl Debug Build",
-      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/clang-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -63,8 +71,8 @@
     },
     {
       "name": "clang-release",
+      "inherits": "base",
       "description": "Clang-cl Release Build",
-      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/clang-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -73,7 +81,6 @@
       }
     }
   ],
-
   "buildPresets": [
     {
       "name": "msvc-debug-build",
