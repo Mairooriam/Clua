@@ -3,7 +3,7 @@
 REM Check if a preset name was provided
 if "%1"=="" (
     echo Usage: run_preset.bat ^<preset-name^>
-    echo Available: msvc-debug, msvc-release, mingw-debug, mingw-release, clang-debug, clang-release
+    echo Available: msvc-debug, msvc-release, mingw-debug, mingw-release, clang-debug, clang-release, clangd-debug
     exit /b 1
 )
 
@@ -35,3 +35,4 @@ if "%1"=="mingw-debug" cmake --build build/mingw-debug
 if "%1"=="mingw-release" cmake --build build/mingw-release
 if "%1"=="clang-debug" cmake --build build/clang-debug
 if "%1"=="clang-release" cmake --build build/clang-release
+if "%1"=="clangd-debug" cmake --build build/clangd-debug

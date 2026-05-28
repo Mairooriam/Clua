@@ -26,6 +26,17 @@
       }
     },
     {
+      "name": "clangd-debug",
+      "inherits": "base",
+      "description": "Clangd Debug Build (for clangd language server)",
+      "binaryDir": "${sourceDir}/build/clangd-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
       "name": "msvc-release",
       "inherits": "base",
       "description": "MSVC Release Build",
