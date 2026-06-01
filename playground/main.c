@@ -17,7 +17,7 @@ int main(int argc, char const* argv[]) {
     }
 
     if (strcmp(argv[1], "1") == 0) {
-        printf("MSCV thingy: %d\n", _MSC_FULL_VER);
+        //        printf("MSCV thingy: %d\n", _MSC_FULL_VER);
 
         UA_Client* client = UA_Client_new();
 

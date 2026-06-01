@@ -11,7 +11,7 @@
       "hidden": true,
       "generator": "Ninja",
       "cacheVariables": {
-        "CMAKE_PREFIX_PATH": "D:/DevTools/MYSYS2/mingw64"
+        "CMAKE_PREFIX_PATH": "C:/msys2/ucrt64/"
       }
     },
     {
@@ -26,14 +26,16 @@
       }
     },
     {
-      "name": "clangd-debug",
+      "name": "clang-mingw-debug",
       "inherits": "base",
       "description": "Clangd Debug Build (for clangd language server)",
-      "binaryDir": "${sourceDir}/build/clangd-debug",
+      "binaryDir": "${sourceDir}/build/clang-mingw-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++"
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_C_COMPILER_TARGET": "x86_64-w64-windows-gnu",
+        "CMAKE_CXX_COMPILER_TARGET": "x86_64-w64-windows-gnu"
       }
     },
     {
@@ -87,8 +89,8 @@
       "binaryDir": "${sourceDir}/build/clang-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_COMPILER": "clang-cl",
-        "CMAKE_CXX_COMPILER": "clang-cl"
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
       }
     }
   ],

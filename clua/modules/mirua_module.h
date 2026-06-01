@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "mirua_types.h"
+
 typedef struct MiruaContext MiruaContext;
 typedef struct MiruaConfig MiruaConfig;
 MiruaContext* mirua_module_create(void);

@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
-
+#include <assert.h>
 #include "mirua_types_internal.h"
 #include "open62541/types.h"
 #include "utils.h"
