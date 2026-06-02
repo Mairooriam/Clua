@@ -3,3 +3,7 @@
 deps/build
 influx/telegraf.conf
 compile_commands.json
+
+
+# Meant to copy src to external to avoid rebuild/fetch
+clua/external/open62541-src 

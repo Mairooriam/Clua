@@ -28,15 +28,24 @@ else()
 endif()
 
 # Use FetchContent to get open62541
+
+## If open62541 sources are already present, use them instead of fetching
+set(open62541_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/open62541-src")
+if(EXISTS ${open62541_SOURCE_DIR})
+message(STATUS "Open62541 Found existing sources at ${open62541_SOURCE_DIR}...")
+add_subdirectory(${open62541_SOURCE_DIR} ${CMAKE_BINARY_DIR}/open62541-build)
+else()
+message(STATUS "Didn't find Open62541 sources at ${open62541_SOURCE_DIR}... Fetching from github")
 include(FetchContent)
-message(STATATUS "Fetching open62541...")
-set(UA_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     open62541
-    GIT_REPOSITORY https://github.com/open62541/open62541.git
-    GIT_TAG v1.5.4
-)
-FetchContent_MakeAvailable(open62541)
+        GIT_REPOSITORY https://github.com/open62541/open62541.git
+        GIT_TAG v1.5.4
+        GIT_SHALLOW ON
+        GIT_PROGRESS ON 
+    )
+    FetchContent_MakeAvailable(open62541)
+endif()
 find_package(replxx REQUIRED)
 find_package(Threads REQUIRED)
  

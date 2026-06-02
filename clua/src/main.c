@@ -15,8 +15,13 @@
 #include "tinycthread.h"
 #define CACHE_SIZE 1024
 
+#define UA_STRING_FMT "%.*s"
+#define UA_STRING_ARG(str) ((int)(str).length), (const char*)(str).data
+#define UA_STRING_ARG_P(strp) ((int)(strp)->length), (const char*)(strp)->data
+
 typedef struct {
     UA_NodeId nodeId;
+    UA_String varName;
     UA_DataValue value;
     UA_StatusCode status;
     UA_DateTime sourceTimestamp;
@@ -129,9 +134,10 @@ int iterate_thread(void* ctx) {
         "CREATE TABLE IF NOT EXISTS plc_data ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
         "nodeid TEXT NOT NULL, "
-        "value TEXT, "
+        "value NUMBER, "
         "type TEXT, "
         "timestamp DATETIME NOT NULL, "
+        "epoch INTEGER NOT NULL, "
         "status TEXT"
         ");";
     rc = sqlite3_exec(db, sql_create, 0, 0, &err_msg);
@@ -170,30 +176,64 @@ int iterate_thread(void* ctx) {
         }
         mtx_lock(&cache_mutex);
         sqlite3_exec(db, "BEGIN TRANSACTION;", 0, 0, 0);
+
+        UA_String nodeIdStr;
+        UA_String_init(&nodeIdStr);
         for (int i = 0; i < cache_count; ++i) {
             UA_DataValue* entryData = &cache[i].value;
+            UA_NodeId* EntryNodeId = &cache[i].nodeId;
 
-            char buf[128];
-            mirua_to_string_nodeId(buf, 128, testClient, &cache[i].nodeId);
-            log_trace("nodeid: %s", buf);
+            // char buf[128];
 
-            double val = 0.0;
-            char valStr[64] = {0};
-            size_t buffSize = sizeof(valStr) - -1;
-            const char* typeStr = "unkown";
+            UA_String_clear(&nodeIdStr);
+            UA_NodeId_print(&cache[i].nodeId, &nodeIdStr);
+
+            char buf[1024];
+            switch (EntryNodeId->identifierType) {
+                case UA_NODEIDTYPE_NUMERIC: {
+                    snprintf(buf, 1023, "%u", EntryNodeId->identifier.numeric);
+                } break;
+
+                case UA_NODEIDTYPE_STRING: {
+                    snprintf(
+                        buf, 1023, UA_STRING_FMT, UA_STRING_ARG(EntryNodeId->identifier.string));
+                } break;
+                default: {
+                    // TODO: move somehwere nice. for now just inline
+                    printf("This part supports only nodeid type numeric and string");
+                } break;
+            }
+            // mirua_to_string_nodeId(buf, 128, testClient, &cache[i].nodeId);
+            log_trace("nodeid:" UA_STRING_FMT, UA_STRING_ARG(nodeIdStr));
+
+            double val = 0.0f;
             if (UA_Variant_isScalar(&entryData->value)) {
                 const UA_DataType* type = entryData->value.type;
 
-                // TODO: Keep going on these
                 if (type == &UA_TYPES[UA_TYPES_BOOLEAN]) {
-                    snprintf(valStr, buffSize, "%i", *(int*)entryData->value.data);
-                } else if (type == &UA_TYPES[UA_TYPES_DOUBLE]) {
-                    snprintf(valStr, buffSize, "%f", *(double*)entryData->value.data);
+                    val = *(UA_Boolean*)entryData->value.data ? 1.0 : 0.0;
                 } else if (type == &UA_TYPES[UA_TYPES_SBYTE]) {
+                    val = (double)*(UA_SByte*)entryData->value.data;
+                } else if (type == &UA_TYPES[UA_TYPES_BYTE]) {
+                    val = (double)*(UA_Byte*)entryData->value.data;
+                } else if (type == &UA_TYPES[UA_TYPES_INT16]) {
+                    val = (double)*(UA_Int16*)entryData->value.data;
                 } else if (type == &UA_TYPES[UA_TYPES_UINT16]) {
-                    snprintf(valStr, buffSize, "%u", *(uint16_t*)entryData->value.data);
+                    val = (double)*(UA_UInt16*)entryData->value.data;
                 } else if (type == &UA_TYPES[UA_TYPES_INT32]) {
-                    snprintf(valStr, buffSize, "%u", *(uint16_t*)entryData->value.data);
+                    val = (double)*(UA_Int32*)entryData->value.data;
+                } else if (type == &UA_TYPES[UA_TYPES_UINT32]) {
+                    val = (double)*(UA_UInt32*)entryData->value.data;
+                } else if (type == &UA_TYPES[UA_TYPES_INT64]) {
+                    val = (double)*(UA_Int64*)entryData->value.data;
+                } else if (type == &UA_TYPES[UA_TYPES_UINT64]) {
+                    val = (double)*(UA_UInt64*)entryData->value.data;
+                } else if (type == &UA_TYPES[UA_TYPES_FLOAT]) {
+                    val = (double)*(UA_Float*)entryData->value.data;
+                } else if (type == &UA_TYPES[UA_TYPES_DOUBLE]) {
+                    val = *(UA_Double*)entryData->value.data;
+                } else {
+                    val = -999.0;
                 }
 
                 // Convert UA_DateTime to ISO8601 string
@@ -209,18 +249,18 @@ int iterate_thread(void* ctx) {
                     dts.hour,
                     dts.min,
                     dts.sec);
-
-                char sql[512];
-                snprintf(
-                    sql,
-                    sizeof(sql),
-                    "INSERT INTO plc_data (nodeid, value, type, timestamp, status) VALUES ('%s', "
-                    "'%s', '%s', '%s', '%u');",
-                    "test",
-                    valStr,
-                    entryData->value.type->typeName,
-                    timestamp,
-                    cache[i].status);
+                    
+                    
+                char sql[640];
+                snprintf(sql, sizeof(sql),
+                        "INSERT INTO plc_data (nodeid, value, type, timestamp, epoch, status) "
+                        "VALUES ('%s', '%f', '%s', '%s', '%lld', '%u');",
+                        buf,
+                        val,
+                        entryData->value.type->typeName,
+                        timestamp,
+                        cache[i].sourceTimestamp,
+                        cache[i].status);
                 sqlite3_exec(db, sql, 0, 0, 0);
 
                 // UA_NodeId_clear(&cache[i].nodeId);
