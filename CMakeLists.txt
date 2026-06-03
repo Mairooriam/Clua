@@ -3,6 +3,7 @@ project(clua LANGUAGES C CXX)
 
 add_compile_definitions(_WIN32)
 add_subdirectory(clua)
+add_subdirectory(visualization)
 add_subdirectory(playground)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)

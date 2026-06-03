@@ -122,7 +122,7 @@ int mirua_subscription_create(UA_Client* client, UA_NodeId nodeId, UA_NodeId sec
 int iterate_thread(void* ctx) {
     sqlite3* db;
     char* err_msg = 0;
-    const char* dbName = "trace.db";
+    const char* dbName = "trace_new.db";
     mtx_init(&cache_mutex, mtx_plain);
     int rc = sqlite3_open(dbName, &db);
     if (rc != SQLITE_OK) {
@@ -131,15 +131,23 @@ int iterate_thread(void* ctx) {
     }
     log_trace("Created sqlite3 connection to %s", dbName);
     const char* sql_create =
+        "CREATE TABLE IF NOT EXISTS plc_variable ("
+        "id INTEGER PRIMARY KEY, "
+        "nodeid TEXT NOT NULL UNIQUE, "
+        "name TEXT, "
+        "datatype TEXT"
+        ");"
         "CREATE TABLE IF NOT EXISTS plc_data ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-        "nodeid TEXT NOT NULL, "
-        "value NUMBER, "
-        "type TEXT, "
-        "timestamp DATETIME NOT NULL, "
-        "epoch INTEGER NOT NULL, "
-        "status TEXT"
-        ");";
+        "variable_id INTEGER NOT NULL, "
+        "epoch_ms INTEGER NOT NULL, "
+        "value REAL, "
+        "value2 REAL, "
+        "status TEXT, "
+        "PRIMARY KEY(variable_id, epoch_ms), "
+        "FOREIGN KEY(variable_id) REFERENCES plc_variable(id)"
+        ");"
+        "CREATE INDEX IF NOT EXISTS idx_plc_data_var_epoch "
+        "ON plc_data(variable_id, epoch_ms);";
     rc = sqlite3_exec(db, sql_create, 0, 0, &err_msg);
     if (rc != SQLITE_OK) {
         printf("SQL error: %s\n", err_msg);
@@ -236,32 +244,58 @@ int iterate_thread(void* ctx) {
                     val = -999.0;
                 }
 
-                // Convert UA_DateTime to ISO8601 string
                 UA_DateTimeStruct dts = UA_DateTime_toStruct(cache[i].sourceTimestamp);
-                char timestamp[32];
-                snprintf(
-                    timestamp,
-                    sizeof(timestamp),
-                    "%04u-%02u-%02uT%02u:%02u:%02u",
-                    dts.year,
-                    dts.month,
-                    dts.day,
-                    dts.hour,
-                    dts.min,
-                    dts.sec);
-                    
-                    
-                char sql[640];
-                snprintf(sql, sizeof(sql),
-                        "INSERT INTO plc_data (nodeid, value, type, timestamp, epoch, status) "
-                        "VALUES ('%s', '%f', '%s', '%s', '%lld', '%u');",
-                        buf,
-                        val,
-                        entryData->value.type->typeName,
-                        timestamp,
-                        cache[i].sourceTimestamp,
-                        cache[i].status);
-                sqlite3_exec(db, sql, 0, 0, 0);
+                UA_Int64 epoch_ms = UA_DateTime_toUnixTime(cache[i].sourceTimestamp) * 1000LL +
+                    (UA_Int64)dts.milliSec;
+
+                int variable_id = -1;
+                sqlite3_stmt* stmt = NULL;
+
+                /* Ensure variable exists */
+                sqlite3_prepare_v2(
+                    db,
+                    "INSERT OR IGNORE INTO plc_variable(nodeid, name, datatype) VALUES(?, ?, ?);",
+                    -1,
+                    &stmt,
+                    NULL);
+                sqlite3_bind_text(stmt, 1, buf, -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(stmt, 2, buf, -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(
+                    stmt,
+                    3,
+                    entryData->value.type ? entryData->value.type->typeName : "unknown",
+                    -1,
+                    SQLITE_TRANSIENT);
+                sqlite3_step(stmt);
+                sqlite3_finalize(stmt);
+
+                /* Look up variable_id */
+                sqlite3_prepare_v2(
+                    db, "SELECT id FROM plc_variable WHERE nodeid = ?;", -1, &stmt, NULL);
+                sqlite3_bind_text(stmt, 1, buf, -1, SQLITE_TRANSIENT);
+                if (sqlite3_step(stmt) == SQLITE_ROW) {
+                    variable_id = sqlite3_column_int(stmt, 0);
+                }
+                sqlite3_finalize(stmt);
+
+                if (variable_id > 0) {
+                    sqlite3_prepare_v2(
+                        db,
+                        "INSERT OR REPLACE INTO plc_data(variable_id, epoch_ms, value, value2, "
+                        "status) "
+                        "VALUES(?, ?, ?, ?, ?);",
+                        -1,
+                        &stmt,
+                        NULL);
+                    sqlite3_bind_int(stmt, 1, variable_id);
+                    sqlite3_bind_int64(stmt, 2, epoch_ms);
+                    sqlite3_bind_double(stmt, 3, val);
+                    sqlite3_bind_double(stmt, 4, val + 1000);
+                    sqlite3_bind_text(
+                        stmt, 5, UA_StatusCode_name(cache[i].status), -1, SQLITE_TRANSIENT);
+                    sqlite3_step(stmt);
+                    sqlite3_finalize(stmt);
+                }
 
                 // UA_NodeId_clear(&cache[i].nodeId);
                 // UA_DataValue_clear(&cache[i].value);
