@@ -1,7 +1,6 @@
 #include "mirua_module.h"
 
 #include <assert.h>
-#include <minwindef.h>
 #include <open62541/client.h>
 #include <open62541/client_config_default.h>
 #include <open62541/client_highlevel.h>
@@ -151,7 +150,7 @@ void mirua_save(MiruaContext* ctx, int idx, int start, int end) {
             char new_filename[256];
             if (fgets(new_filename, sizeof(new_filename), stdin)) {
                 new_filename[strcspn(new_filename, "\n")] = '\0';
-                filename = _strdup(new_filename);
+                filename = strdup(new_filename);
                 if (!filename) {
                     log_error("[SAVE] Failed to allocate memory for filename");
                     mirua_free_nodeList(&subset);
@@ -308,7 +307,7 @@ MiruaContext* mirua_module_create(void) {
     //
     //      ctx->config.endpoint = endpoint;
     //  } else {
-    ctx->config.endpoint = _strdup("opc.tcp://127.0.0.1:4840");
+    ctx->config.endpoint = strdup("opc.tcp://127.0.0.1:4840");
     ctx->config.defaultRoot = UA_NODEID_NUMERIC(0, 85);
     ctx->config.output_path = "output.txt";
 
@@ -359,9 +358,9 @@ int mirua_connect(MiruaContext* ctx, const char* endpoint) {
     } else {
         status = UA_Client_connect(ctx->client, endpoint);
         if (status == UA_STATUSCODE_GOOD) {
-            char* new_endpoint = _strdup(endpoint); 
-            free(ctx->config.endpoint);             
-            ctx->config.endpoint = new_endpoint;     
+            char* new_endpoint = strdup(endpoint);
+            free(ctx->config.endpoint);
+            ctx->config.endpoint = new_endpoint;
             log_trace("[CONNECT] - updated endpoint into config");
         } else {
             log_error("Connecting to server { %s } was not succesfull", endpoint);
@@ -1264,7 +1263,7 @@ void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value)
         case MIRUA_CONFIG_TYPE_STRING: {
             char** field = (char**)((char*)config + map->offset);
             free(*field);
-            *field = _strdup(value);
+            *field = strdup(value);
             break;
         }
         case MIRUA_CONFIG_TYPE_NODEID: {
@@ -1308,13 +1307,13 @@ void mirua_config_set_by_idx(MiruaConfig* config, size_t idx, const char* value)
         case MIRUA_CONFIG_TYPE_FILE_OUTPUT_PATH: {
             char** field = (char**)((char*)config + map->offset);
             free(*field);
-            *field = _strdup(value);
+            *field = strdup(value);
         }
         case MIRUA_CONFIG_TYPE_ENDPOINT: {
             char** field = (char**)((char*)config + map->offset);
             if (mirua_config_validate_endpoint(value)) {
                 free(*field);
-                *field = _strdup(value);
+                *field = strdup(value);
             } else {
                 log_error("Endpoint validation failed. Endpoint should start with opc.tcp://");
             }
@@ -1410,7 +1409,7 @@ void mirua_config_set_ctx(MiruaContext* ctx, const char* key, const char* value)
 static inline bool mirua_isvalid_filter_str(const char* str) {
     if (!str || strlen(str) == 0) return false;
 
-    char* copy = _strdup(str);
+    char* copy = strdup(str);
     char* token = strtok(copy, ",");
     while (token) {
         while (*token == ' ') token++;
@@ -1620,7 +1619,7 @@ uint32_t mirua_parse_filters(const char* filters_str) {
     uint32_t mask = 0;
     if (!filters_str || strlen(filters_str) == 0) return mask;
 
-    char* copy = _strdup(filters_str);
+    char* copy = strdup(filters_str);
     char* token = strtok(copy, ",");
     while (token) {
         while (*token == ' ') token++;
