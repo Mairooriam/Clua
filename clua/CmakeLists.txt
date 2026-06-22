@@ -65,6 +65,12 @@ set(SOURCES
 )
 
 # Executable
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+  set_source_files_properties(
+    external/sqlite/sqlite3.c
+    PROPERTIES COMPILE_OPTIONS "-Wno-unsafe-buffer-usage"
+  )
+endif()
 add_executable(main ${SOURCES})
 target_compile_definitions(main PRIVATE LOG_USE_COLOR _CRT_SECURE_NO_WARNINGS)
 target_include_directories(main PRIVATE

@@ -63,16 +63,50 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(sdl)
 
+set(IMGUI_SRCS
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+)
 
+add_library(imgui STATIC ${IMGUI_SRCS})
+target_include_directories(imgui PUBLIC
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
+    ${sdl_SOURCE_DIR}/include
+    ${Vulkan_INCLUDE_DIRS}
+)
+target_link_libraries(imgui PUBLIC SDL3-static ${Vulkan_LIBRARIES})
+
+# Setup ImPlot
+set(IMPLOT_SOURCE
+    src/implot.cpp
+    src/implot_demo.cpp
+    src/implot_items.cpp
+)
+add_library(implot STATIC ${IMPLOT_SOURCE})
+add_library(implot::implot ALIAS implot)
+target_include_directories(implot PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(implot PUBLIC imgui)
 # Source files
 # Add tinycthread.c to sources
 set(SOURCES
     src/main.cpp
     external/sqlite/sqlite3.c
-    ${IMGUI_SRCS}
 )
 
 # Executable
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    if(TARGET SDL3-static)
+        target_compile_options(SDL3-static PRIVATE -Wno-unsafe-buffer-usage)
+    endif()
+endif()
 add_executable(Vis ${SOURCES})
 target_compile_definitions(Vis PRIVATE LOG_USE_COLOR _CRT_SECURE_NO_WARNINGS)
 target_include_directories(Vis PRIVATE
@@ -85,5 +119,5 @@ target_include_directories(Vis PRIVATE
     ${sdl_SOURCE_DIR}/include
     ${Vulkan_INCLUDE_DIRS}
 )
-target_link_libraries(Vis PRIVATE SDL3-static ${Vulkan_LIBRARIES})
+target_link_libraries(Vis PRIVATE SDL3-static ${Vulkan_LIBRARIES} imgui implot)
 
