@@ -97,11 +97,20 @@ target_include_directories(implot PUBLIC
 )
 target_link_libraries(implot PUBLIC imgui)
 
+
+if(NOT TARGET sqlite3)
+  add_library(sqlite3 STATIC [sqlite3.c](http://_vscodecontentref_/1))
+  target_include_directories(sqlite3 PUBLIC
+      ${CMAKE_CURRENT_SOURCE_DIR}/external/sqlite
+  )
+endif()
+
 # Add tinycthread.c to sources
 set(SOURCES
     src/main.cpp
+    src/plot.cpp
+    src/log.c
     src/imgui_SDL3_Vulkan.cpp
-    external/sqlite/sqlite3.c
 )
 
 # Executable
@@ -121,5 +130,5 @@ target_include_directories(Vis PRIVATE
     ${sdl_SOURCE_DIR}/include
     ${Vulkan_INCLUDE_DIRS}
 )
-target_link_libraries(Vis PRIVATE SDL3-static ${Vulkan_LIBRARIES} imgui implot)
+target_link_libraries(Vis PRIVATE SDL3-static ${Vulkan_LIBRARIES} imgui implot sqlite3)
 

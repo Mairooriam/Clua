@@ -1,3 +1,4 @@
+#pragma once
 // Dear ImGui: standalone example application for SDL3 + Vulkan
 
 // Learn about Dear ImGui:
@@ -35,7 +36,7 @@
 static VkDebugReportCallbackEXT g_DebugReport = VK_NULL_HANDLE;
 #endif
 
-typedef struct VulkanContext {
+struct VulkanContext {
     // Data
     VkAllocationCallbacks* Allocator = nullptr;
     VkInstance Instance = VK_NULL_HANDLE;
@@ -52,7 +53,7 @@ typedef struct VulkanContext {
     SDL_Window* window;
     ImGui_ImplVulkanH_Window* wd;
     bool VsyncEnabled = true;
-} VulkanContext;
+};
 // Volk headers
 
 int init_sdl3_vulkan(VulkanContext* ctx);
