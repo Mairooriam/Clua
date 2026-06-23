@@ -29,12 +29,7 @@ endif()
 find_package(Threads REQUIRED)
 find_package(Vulkan REQUIRED)
 
-if(NOT TARGET sqlite3)
-  add_library(sqlite3 STATIC [sqlite3.c](http://_vscodecontentref_/1))
-  target_include_directories(sqlite3 PUBLIC
-      ${CMAKE_CURRENT_SOURCE_DIR}/external/sqlite
-  )
-endif()
+
 
 #Add tinycthread.c to sources
 set(SOURCES
@@ -45,12 +40,6 @@ set(SOURCES
     src/imgui_SDL3_Vulkan.cpp
 )
 
-# Executable
-if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-  if(TARGET SDL3-static)
-    target_compile_options(SDL3-static PRIVATE -Wno-unsafe-buffer-usage)
-  endif()
-endif()
 add_executable(Vis ${SOURCES})
 target_compile_definitions(Vis PRIVATE LOG_USE_COLOR _CRT_SECURE_NO_WARNINGS)
 target_include_directories(Vis PRIVATE
@@ -59,6 +48,7 @@ target_include_directories(Vis PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/external
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
+    ${implot_SOURCE_DIR}
     ${sdl_SOURCE_DIR}/include
     ${Vulkan_INCLUDE_DIRS}
 )

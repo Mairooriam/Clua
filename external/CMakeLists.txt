@@ -1,5 +1,4 @@
 include(FetchContent)
-
 # =========================================================
 # Option: allow user to provide local source directories
 # =========================================================
@@ -9,18 +8,12 @@ include(FetchContent)
 # =========================================================
 # open62541
 # =========================================================
-if(OPEN62541_SOURCE_DIR)
-  message(STATUS "Using local open62541: ${OPEN62541_SOURCE_DIR}")
-  add_subdirectory(${OPEN62541_SOURCE_DIR} open62541-build)
-else()
-  message(STATUS "Fetching open62541 from GitHub")
+set(OPEN62541_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(UA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(UA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(UA_ENABLE_AMALGAMATION OFF CACHE BOOL "" FORCE)
 
-  set(OPEN62541_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-  set(UA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-  set(UA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
-  set(UA_ENABLE_AMALGAMATION OFF CACHE BOOL "" FORCE)
-
-  FetchContent_Declare(
+FetchContent_Declare(
         open62541
         GIT_REPOSITORY https://github.com/open62541/open62541.git
         GIT_TAG v1.5.4
@@ -28,48 +21,34 @@ else()
         GIT_PROGRESS ON
     )
 
-  FetchContent_MakeAvailable(open62541)
-endif()
-
 # =========================================================
 # replxx
 # =========================================================
-if(REPLXX_SOURCE_DIR)
-  message(STATUS "Using local replxx: ${REPLXX_SOURCE_DIR}")
-  add_subdirectory(${REPLXX_SOURCE_DIR} replxx-build)
-else()
-  message(STATUS "Fetching replxx from GitHub")
+set(REPLXX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(REPLXX_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
-  set(REPLXX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-  set(REPLXX_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-  set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-
-  FetchContent_Declare(
+FetchContent_Declare(
         replxx
         GIT_REPOSITORY https://github.com/AmokHuginnsson/replxx.git
         GIT_SHALLOW ON
         GIT_PROGRESS ON
     )
 
-  FetchContent_MakeAvailable(replxx)
-endif()
+# =========================================================
+# sdl
+# =========================================================
 
-# =========================================================
-# sqlite3 library
-# =========================================================
-add_library(sqlite3 STATIC sqlite/sqlite3.c)
-target_include_directories(sqlite3 PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/sqlite
+FetchContent_Declare(
+    sdl
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG release-3.4.10
+    GIT_SHALLOW ON
+    GIT_PROGRESS ON
 )
-
 # =========================================================
-# tinycthread library
+# imgui
 # =========================================================
-add_library(tinycthread STATIC tinycthread.c)
-target_include_directories(tinycthread PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
@@ -79,7 +58,48 @@ FetchContent_Declare(
 )
 
 
-FetchContent_MakeAvailable(imgui)
+# =========================================================
+# MakeAvailable
+# =========================================================
+set(CMAKE_CXX_FLAGS_ORIG "${CMAKE_CXX_FLAGS}")
+set(CMAKE_C_FLAGS_ORIG "${CMAKE_C_FLAGS}")
+
+if(MSVC)
+  string(APPEND CMAKE_CXX_FLAGS " /W0")
+  string(APPEND CMAKE_C_FLAGS " /W0")
+else()
+  string(APPEND CMAKE_CXX_FLAGS " -w")
+  string(APPEND CMAKE_C_FLAGS " -w")
+endif()
+
+FetchContent_MakeAvailable(open62541 replxx sdl imgui)
+
+# Restore original flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_ORIG}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS_ORIG}")
+# =========================================================
+# sqlite3 library
+# =========================================================
+add_library(sqlite3 STATIC sqlite/sqlite3.c)
+target_compile_options(sqlite3 PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W0>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
+)
+target_include_directories(sqlite3 PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/sqlite
+)
+
+# =========================================================
+# tinycthread library
+# =========================================================
+add_library(tinycthread STATIC tinycthread.c)
+target_compile_options(tinycthread PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W0>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
+)
+target_include_directories(tinycthread PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
 set(IMGUI_SRCS
     ${imgui_SOURCE_DIR}/imgui.cpp
@@ -91,15 +111,6 @@ set(IMGUI_SRCS
     ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
 )
 
-FetchContent_Declare(
-    sdl
-    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-    GIT_TAG release-3.4.10
-    GIT_SHALLOW ON
-    GIT_PROGRESS ON
-)
-
-FetchContent_MakeAvailable(sdl)
 
 add_library(imgui STATIC ${IMGUI_SRCS})
 target_include_directories(imgui PUBLIC
@@ -111,9 +122,9 @@ target_include_directories(imgui PUBLIC
 target_link_libraries(imgui PUBLIC SDL3-static ${Vulkan_LIBRARIES})
 
 set(IMPLOT_SOURCE
-    src/implot.cpp
-    src/implot_demo.cpp
-    src/implot_items.cpp
+    implot/implot.cpp
+    implot/implot_demo.cpp
+    implot/implot_items.cpp
 )
 add_library(implot STATIC ${IMPLOT_SOURCE})
 target_include_directories(implot PUBLIC ${IMPLOT_SOURCE_DIR} ${imgui_SOURCE_DIR})
@@ -121,7 +132,7 @@ target_link_libraries(implot PUBLIC imgui)
 
 add_library(implot::implot ALIAS implot)
 target_include_directories(implot PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    implot/
 )
 target_link_libraries(implot PUBLIC imgui)
 
