@@ -3,11 +3,6 @@
 #include <stdio.h>  // printf, fprintf
 
 #include "imgui_impl_sdl3.h"
-void startImguiFrame() {
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplSDL3_NewFrame();
-    ImGui::NewFrame();
-}
 // Poll and handle events (inputs, window resize, etc.)
 // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui
 // wants to use your inputs.
@@ -459,19 +454,13 @@ void ToggleVsyncSwapChain(VulkanContext* ctx, bool vsyncOn) {
 
     VkPresentModeKHR modes_vsync_on[] = {VK_PRESENT_MODE_FIFO_KHR};
     VkPresentModeKHR modes_vsync_off[] = {
-        VK_PRESENT_MODE_MAILBOX_KHR,
-        VK_PRESENT_MODE_IMMEDIATE_KHR,
-        VK_PRESENT_MODE_FIFO_KHR
-    };
+        VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_FIFO_KHR};
 
     VkPresentModeKHR* modes = ctx->VsyncEnabled ? modes_vsync_on : modes_vsync_off;
     int mode_count = ctx->VsyncEnabled ? 1 : 3;
 
     ctx->wd->PresentMode = ImGui_ImplVulkanH_SelectPresentMode(
-        ctx->PhysicalDevice,
-        ctx->wd->Surface,
-        modes,
-        mode_count);
+        ctx->PhysicalDevice, ctx->wd->Surface, modes, mode_count);
 
     ctx->SwapChainRebuild = true;
 }

@@ -70,6 +70,62 @@ target_include_directories(tinycthread PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.92.8
+    GIT_SHALLOW ON
+    GIT_PROGRESS ON
+)
+
+
+FetchContent_MakeAvailable(imgui)
+
+set(IMGUI_SRCS
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+)
+
+FetchContent_Declare(
+    sdl
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG release-3.4.10
+    GIT_SHALLOW ON
+    GIT_PROGRESS ON
+)
+
+FetchContent_MakeAvailable(sdl)
+
+add_library(imgui STATIC ${IMGUI_SRCS})
+target_include_directories(imgui PUBLIC
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
+    ${sdl_SOURCE_DIR}/include
+    ${Vulkan_INCLUDE_DIRS}
+)
+target_link_libraries(imgui PUBLIC SDL3-static ${Vulkan_LIBRARIES})
+
+set(IMPLOT_SOURCE
+    src/implot.cpp
+    src/implot_demo.cpp
+    src/implot_items.cpp
+)
+add_library(implot STATIC ${IMPLOT_SOURCE})
+target_include_directories(implot PUBLIC ${IMPLOT_SOURCE_DIR} ${imgui_SOURCE_DIR})
+target_link_libraries(implot PUBLIC imgui)
+
+add_library(implot::implot ALIAS implot)
+target_include_directories(implot PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(implot PUBLIC imgui)
+
+
 # =========================================================
 # Optional: make sure external libs don't install by default
 # =========================================================

@@ -298,7 +298,9 @@ int main(int, char**) {
         SDL_GetWindowSize(ctx.window, &fb_width, &fb_height);
         ResizeSwapChain(&ctx, fb_width, fb_height);
 
-        startImguiFrame();
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
 
         if (show_demo_window) ImGui::ShowDemoWindow(&show_demo_window);
 

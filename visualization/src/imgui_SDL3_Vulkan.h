@@ -57,7 +57,6 @@ struct VulkanContext {
 // Volk headers
 
 int init_sdl3_vulkan(VulkanContext* ctx);
-void startImguiFrame();
 void cleanup(VulkanContext* ctx);
 void ToggleVsyncSwapChain(VulkanContext* ctx, bool vsyncOn);
 void imguiHandleInput(SDL_Event* event);
