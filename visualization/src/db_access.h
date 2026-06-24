@@ -25,3 +25,4 @@ void insert_test_value(sqlite3* db, sqlite3_int64 timestamp_ms, int variable_id,
 void shutdown_test_data_writer();
 
 std::string db_read_sql_file_filtered(const char* filename);
+bool db_exists_in_database(sqlite3* db, const char* variable_name);

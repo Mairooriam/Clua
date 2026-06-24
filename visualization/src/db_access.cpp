@@ -46,17 +46,51 @@ int check_sqlite_result(int rc, sqlite3* db, const char* context) {
         return 1;
     }
 }
+bool db_exists_in_database(sqlite3* db, const char* variable_name) {
+    sqlite3_stmt* exists_stmt = nullptr;
+    const char* exists_sql = "SELECT 1 FROM variable WHERE name = ?1 LIMIT 1;";
+    int rc = sqlite3_prepare_v2(db, exists_sql, -1, &exists_stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        check_sqlite_result(rc, db, "prepare variable exists query");
+        return 0;
+    }
+
+    rc = sqlite3_bind_text(exists_stmt, 1, variable_name, -1, SQLITE_TRANSIENT);
+    if (rc != SQLITE_OK) {
+        check_sqlite_result(rc, db, "bind variable exists name");
+        sqlite3_finalize(exists_stmt);
+        return 0;
+    }
+
+    rc = sqlite3_step(exists_stmt);
+    if (rc == SQLITE_DONE) {
+        log_warn("variable not found: %s", variable_name);
+        sqlite3_finalize(exists_stmt);
+        return 0;
+    }
+    if (rc != SQLITE_ROW) {
+        check_sqlite_result(rc, db, "step variable exists query");
+        sqlite3_finalize(exists_stmt);
+        return 0;
+    }
+    sqlite3_finalize(exists_stmt);
+    return 1;
+}
 int read_variable_history(sqlite3* db, const char* variable_name, MeasurementRecord* record) {
     const char* sql = R"sql(
-        SELECT
-            d.timestamp,
-            d.value
-        FROM data AS d
-        JOIN variable AS v
-            ON v.id = d.variable_id
-        WHERE v.name = ?1
-        ORDER BY d.timestamp ASC;
+      SELECT
+          d.timestamp,
+          d.value
+      FROM data AS d
+      JOIN variable AS v
+      ON v.id = d.variable_id
+      WHERE v.name = ?1 AND d.timestamp > ?2
+      ORDER BY d.timestamp ASC;
     )sql";
+    if (!db_exists_in_database(db, variable_name)) {
+        log_warn("variable [%s] doesn't exist in the database.", variable_name);
+        return 0;
+    }
 
     sqlite3_stmt* stmt = nullptr;
 
@@ -67,10 +101,23 @@ int read_variable_history(sqlite3* db, const char* variable_name, MeasurementRec
         return 0;
     }
 
-    rc = sqlite3_bind_text(stmt, 1, variable_name, -1, SQLITE_TRANSIENT);
+    rc = sqlite3_bind_text(stmt, 0, variable_name, -1, SQLITE_TRANSIENT);
 
     if (rc != SQLITE_OK) {
         check_sqlite_result(rc, db, "bind variable name");
+        sqlite3_finalize(stmt);
+        return 0;
+    }
+
+    sqlite3_int64 last_timestamp = 0;
+    auto it = record->find(variable_name);
+    if (it != record->end() && !it->second.timestamp.empty()) {
+        last_timestamp = it->second.timestamp.back();
+    }
+
+    rc = sqlite3_bind_int64(stmt, 2, last_timestamp);
+    if (rc != SQLITE_OK) {
+        check_sqlite_result(rc, db, "bind last timestamp");
         sqlite3_finalize(stmt);
         return 0;
     }

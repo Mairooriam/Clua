@@ -27,6 +27,7 @@
 
 #include "SDL3/SDL_timer.h"
 #include "db_access.h"
+#include "db_render.h"
 #include "imgui.h"
 #include "imgui_SDL3_Vulkan.h"
 #include "imgui_impl_sdl3.h"
@@ -137,9 +138,9 @@ int main(int, char**) {
         if (frame_counter % 30 == 0) {
             int res = -1;
             res = read_variable_history(dbCtx.db, "temperature", &record);
-            res = read_variable_history(dbCtx.db, "pressure", &record);
-            res = read_variable_history(dbCtx.db, "humidity", &record);
-            res = read_variable_history(dbCtx.db, "voltage", &record);
+            res = read_variable_history(dbCtx.db, "tatu", &record);
+            res = read_variable_history(dbCtx.db, "teemu", &record);
+            // res = read_variable_history(dbCtx.db, "voltage", &record);
         }
 
         // [If using SDL_MAIN_USE_CALLBACKS: all code below would likely be your SDL_AppIterate()
@@ -158,9 +159,10 @@ int main(int, char**) {
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
 
-        if (show_demo_window) ImGui::ShowDemoWindow(&show_demo_window);
-
-        // ImGui::Begin("History");
+        ImGui::Begin("History");
+        // db_render_measurements(&record["temperature"]);
+        db_render_measurementRecord(&record);
+        ImGui::End();
 
         // if (ImPlot::BeginPlot("Temperature", ImVec2(-1, 180))) {
         //     ImPlot::SetupAxes("Time (s)", "Temperature (C)");
@@ -223,7 +225,6 @@ int main(int, char**) {
         // ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear
         // ImGui!).
         if (show_demo_window) ImGui::ShowDemoWindow(&show_demo_window);
-        ImPlot::ShowDemoWindow();
 
         // Rendering
         ImGui::Render();

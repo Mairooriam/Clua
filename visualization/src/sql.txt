@@ -1,0 +1,40 @@
+--
+-- File generated with SQLiteStudio v3.4.21 on Wed Jun 24 20:13:18 2026
+--
+-- Text encoding used: UTF-8
+--
+PRAGMA foreign_keys = off;
+BEGIN TRANSACTION;
+
+-- Table: Data
+CREATE TABLE IF NOT EXISTS Data (
+    id          INTEGER PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT
+                        NOT NULL,
+    timestamp   INTEGER NOT NULL,
+    variable_id INTEGER,
+    value       REAL
+);
+
+
+-- Table: unit
+CREATE TABLE IF NOT EXISTS unit (
+    id          INTEGER PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT
+                        NOT NULL,
+    unit        TEXT    UNIQUE,
+    description TEXT
+);
+
+
+-- Table: variable
+CREATE TABLE IF NOT EXISTS variable (
+    id      INTEGER PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT
+                    NOT NULL,
+    name            NOT NULL
+                    UNIQUE,
+    unit_id         REFERENCES unit (id) 
+);
+
+
+COMMIT TRANSACTION;
+PRAGMA foreign_keys = on;
+
