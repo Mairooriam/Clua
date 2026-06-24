@@ -36,6 +36,7 @@ set(SOURCES
     src/main.cpp
     src/plot.cpp
     src/OpcUa.cpp
+    src/db_access.cpp
     src/log.c
     src/imgui_SDL3_Vulkan.cpp
 )
