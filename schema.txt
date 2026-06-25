@@ -1,1 +1,78 @@
-#hello
+--
+-- File generated with SQLiteStudio v3.4.21 on Fri Jun 26 02:08:36 2026
+--
+-- Text encoding used: UTF-8
+--
+PRAGMA foreign_keys = off;
+BEGIN TRANSACTION;
+
+-- Table: Data
+CREATE TABLE IF NOT EXISTS Data (
+    id          INTEGER PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT
+                        NOT NULL,
+    timestamp   INTEGER NOT NULL,
+    variable_id INTEGER REFERENCES variable (id),
+    value       REAL
+)
+STRICT;
+
+
+-- Table: unit
+CREATE TABLE IF NOT EXISTS unit (
+    id          INTEGER PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT
+                        NOT NULL,
+    unit        TEXT    UNIQUE,
+    description TEXT
+);
+
+
+-- Table: variable
+CREATE TABLE IF NOT EXISTS variable (
+    id      INTEGER PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT
+                    NOT NULL,
+    name            NOT NULL
+                    UNIQUE,
+    unit_id         REFERENCES unit (id) 
+);
+
+
+-- View: DataByName
+CREATE VIEW IF NOT EXISTS DataByName AS
+    SELECT d.timestamp,
+           v.name AS variable_name,
+           d.value
+      FROM Data d
+           JOIN
+           variable v ON v.id = d.variable_id;
+
+
+-- Trigger: trg_DataByName_insert
+CREATE TRIGGER IF NOT EXISTS trg_DataByName_insert
+                  INSTEAD OF INSERT
+                          ON DataByName
+BEGIN
+    INSERT INTO variable (
+                             name
+                         )
+                         VALUES (
+                             NEW.variable_name
+                         )
+                         ON CONFLICT (
+                             name
+                         )
+                         DO NOTHING;
+    INSERT INTO Data (
+                         timestamp,
+                         variable_id,
+                         value
+                     )
+                     SELECT NEW.timestamp,
+                            id,
+                            NEW.value
+                       FROM variable
+                      WHERE name = NEW.variable_name;
+END;
+
+
+COMMIT TRANSACTION;
+PRAGMA foreign_keys = on;
