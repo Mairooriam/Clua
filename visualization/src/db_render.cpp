@@ -1,6 +1,7 @@
 #include "db_render.h"
 
 #include <imgui.h>
+#include <implot.h>
 
 #include "db_access.h"
 
@@ -51,10 +52,46 @@ void db_render_measurementRecord(MeasurementRecord* record) {
 
     for (const auto& [name, meas] : *record) {
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen;
-        if (ImGui::CollapsingHeader(name.c_str(), flags)) {
-            ImGui::PushID(name.c_str());
-            db_render_measurements(const_cast<Measurements*>(&meas));
-            ImGui::PopID();
+        if (!meas.timestamp.empty()) {
+            if (ImGui::CollapsingHeader(name.c_str(), flags)) {
+                ImGui::PushID(name.c_str());
+                db_render_measurements(const_cast<Measurements*>(&meas));
+                ImGui::PopID();
+            }
         }
+    }
+}
+
+void db_render_plot_measurementRecord(MeasurementRecord* record) {
+    if (record == nullptr || record->empty()) {
+        ImGui::TextUnformatted("No data to plot.");
+        return;
+    }
+
+    if (ImPlot::BeginPlot("OPC UA Simulated")) {
+        ImPlot::SetupAxes("Time", "Value");
+        ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
+
+        for (const auto& ht : *record) {
+            const auto& ts = ht.second.timestamp;
+            const auto& vals = ht.second.value;
+
+            if (ts.empty() || vals.empty() || ts.size() != vals.size()) {
+                continue;
+            }
+
+            std::vector<double> ts_double(ts.size());
+            for (size_t i = 0; i < ts.size(); ++i) {
+                ts_double[i] = static_cast<double>(ts[i]) / 1000.0;
+            }
+
+            ImPlot::PlotLine(
+                ht.first.c_str(),
+                ts_double.data(),
+                vals.data(),
+                static_cast<int>(vals.size()));
+        }
+
+        ImPlot::EndPlot();
     }
 }

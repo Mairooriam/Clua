@@ -44,6 +44,7 @@ set(SOURCES
 
 add_executable(Vis ${SOURCES})
 target_compile_definitions(Vis PRIVATE LOG_USE_COLOR _CRT_SECURE_NO_WARNINGS)
+target_compile_options(Vis PRIVATE -g -fno-omit-frame-pointer)
 target_include_directories(Vis PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -54,5 +55,7 @@ target_include_directories(Vis PRIVATE
     ${sdl_SOURCE_DIR}/include
     ${Vulkan_INCLUDE_DIRS}
 )
+
+target_link_options(Vis PRIVATE -rdynamic)
 target_link_libraries(Vis PRIVATE SDL3-static ${Vulkan_LIBRARIES} imgui implot sqlite3)
 

@@ -4,3 +4,4 @@
 
 void db_render_measurements(Measurements* meas);
 void db_render_measurementRecord(MeasurementRecord* record);
+void db_render_plot_measurementRecord(MeasurementRecord* record);

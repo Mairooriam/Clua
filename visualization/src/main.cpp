@@ -24,6 +24,7 @@
 #include <stdlib.h>  // abort
 
 #include <cstdint>
+#include <iostream>
 
 #include "SDL3/SDL_timer.h"
 #include "db_access.h"
@@ -117,29 +118,32 @@ int main(int, char**) {
         }
         if (frame_counter % 60 == 0) {
             insert_test_value(
-                dbCtx.db, timestamp_ms, 1, 21.0 + std::sin(frame_counter * 0.01) * 2.0);
+                dbCtx.db, timestamp_ms, "test1", 21.0 + std::sin(frame_counter * 0.01) * 2.0);
         }
 
         if (frame_counter % 120 == 0) {
             insert_test_value(
-                dbCtx.db, timestamp_ms, 2, 101325.0 + std::sin(frame_counter * 0.005) * 100.0);
+                dbCtx.db,
+                timestamp_ms,
+                "test2",
+                101325.0 + std::sin(frame_counter * 0.005) * 100.0);
         }
 
         if (frame_counter % 300 == 0) {
             insert_test_value(
-                dbCtx.db, timestamp_ms, 3, 50.0 + std::sin(frame_counter * 0.008) * 10.0);
+                dbCtx.db, timestamp_ms, "test3", 50.0 + std::sin(frame_counter * 0.008) * 10.0);
         }
 
         if (frame_counter % 600 == 0) {
             insert_test_value(
-                dbCtx.db, timestamp_ms, 4, 12.0 + std::sin(frame_counter * 0.02) * 0.2);
+                dbCtx.db, timestamp_ms, "test4", 12.0 + std::sin(frame_counter * 0.02) * 0.2);
         }
 
         if (frame_counter % 30 == 0) {
             int res = -1;
-            res = read_variable_history(dbCtx.db, "temperature", &record);
-            res = read_variable_history(dbCtx.db, "tatu", &record);
-            res = read_variable_history(dbCtx.db, "teemu", &record);
+            // res = read_variable_history(dbCtx.db, "temperature", &record);
+            // res = read_variable_history(dbCtx.db, "tatu", &record);
+            // res = read_variable_history(dbCtx.db, "teemu", &record);
             // res = read_variable_history(dbCtx.db, "voltage", &record);
         }
 
@@ -159,60 +163,86 @@ int main(int, char**) {
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
 
+        // kysy muutujat sqlit
+        // valitse muuttujat jota logataan ( jos yksikin valittu loggaa )
+        static bool autoUpdate = true;
+        static bool trig = false;
+        static int trigThreshold = 600;
+        if (frame_counter % trigThreshold == 0) {
+            trig = true;
+        } else {
+            trig = false;
+        }
+
+        static std::vector<db_schema_variable> variables;
+        if (autoUpdate && trig) {
+            variables.clear();
+            db_query_variable_info(dbCtx.db, variables);
+            for (auto variable : variables) {
+                printf("id:%zu name:%s\n", variable.id, variable.name.c_str());
+            }
+        }
+
         ImGui::Begin("History");
-        // db_render_measurements(&record["temperature"]);
-        db_render_measurementRecord(&record);
+        static std::vector<bool> selected{0};
+        static bool plotFetch = true;
+        static bool plotFetchTrig = false;
+        static int plotFetchPollRate = 600;
+        if (selected.size() < variables.size()) {
+            selected.resize(variables.size(), false);
+        }
+        if (variables.size() >= 1) {
+            for (size_t i = 0; i < variables.size(); ++i) {
+                auto& variable = variables[i];
+
+                bool checked = selected[i];  // copy out from proxy
+                std::string label = std::format("id:{}-name:{}", variable.id, variable.name);
+
+                if (ImGui::Checkbox(label.c_str(), &checked)) {
+                    selected[i] = checked;  // write back
+                }
+                if (checked) {
+                    plotFetchTrig = true;
+                }
+            }
+        }
+        // TODO: move away from rendering for now here.
+        if (frame_counter % plotFetchPollRate == 0) {
+            plotFetchTrig = true;
+        }
+        // stuff to run more frequent. possibly combine with the other one. sicne few variables.
+        // iterating is fast...
+        // like max couple thousand. not actually iterating over the variable data
+        for (size_t i = 0; i < variables.size(); i++) {
+            auto variable = variables[i];
+
+            if (selected[i] == false) {
+                auto it = record.find(variable.name);
+                if (it != record.end()) {
+                    it->second.timestamp.clear();
+                    it->second.value.clear();
+                }
+            }
+        }
+
+        // Possibly heavy stuff here only run now and then
+        if (plotFetch && plotFetchTrig) {
+            for (size_t i = 0; i < variables.size(); i++) {
+                auto variable = variables[i];
+                if (selected[i] == true) {
+                    read_variable_history(dbCtx.db, variable.name.c_str(), &record);
+                }
+            }
+            plotFetchTrig = false;
+        }
+
+        // db_render_measurementRecord(&record);
         ImGui::End();
 
-        // if (ImPlot::BeginPlot("Temperature", ImVec2(-1, 180))) {
-        //     ImPlot::SetupAxes("Time (s)", "Temperature (C)");
-        //     if (!temperature_x.empty()) {
-        //         ImPlot::PlotLine(
-        //             "temperature",
-        //             temperature_x.data(),
-        //             temperature_y.data(),
-        //             static_cast<int>(temperature_x.size()));
-        //     }
-        //     ImPlot::EndPlot();
-        // }
-        //
-        // if (ImPlot::BeginPlot("Pressure", ImVec2(-1, 180))) {
-        //     ImPlot::SetupAxes("Time (s)", "Pressure (Pa)");
-        //     if (!pressure_x.empty()) {
-        //         ImPlot::PlotLine(
-        //             "pressure",
-        //             pressure_x.data(),
-        //             pressure_y.data(),
-        //             static_cast<int>(pressure_x.size()));
-        //     }
-        //     ImPlot::EndPlot();
-        // }
-        //
-        // if (ImPlot::BeginPlot("Humidity", ImVec2(-1, 180))) {
-        //     ImPlot::SetupAxes("Time (s)", "Humidity (%)");
-        //     if (!humidity_x.empty()) {
-        //         ImPlot::PlotLine(
-        //             "humidity",
-        //             humidity_x.data(),
-        //             humidity_y.data(),
-        //             static_cast<int>(humidity_x.size()));
-        //     }
-        //     ImPlot::EndPlot();
-        // }
-        //
-        // if (ImPlot::BeginPlot("Voltage", ImVec2(-1, 180))) {
-        //     ImPlot::SetupAxes("Time (s)", "Voltage (V)");
-        //     if (!voltage_x.empty()) {
-        //         ImPlot::PlotLine(
-        //             "voltage",
-        //             voltage_x.data(),
-        //             voltage_y.data(),
-        //             static_cast<int>(voltage_x.size()));
-        //     }
-        //     ImPlot::EndPlot();
-        // }
+        ImGui::Begin("plotting");
+        db_render_plot_measurementRecord(&record);
+        ImGui::End();
 
-        // ImGui::End();
         if (ImGui::Checkbox("VSync", &vsync)) {
             ToggleVsyncSwapChain(&ctx, vsync);
         }
