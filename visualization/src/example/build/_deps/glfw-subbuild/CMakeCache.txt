@@ -44,7 +44,7 @@ CMAKE_SKIP_RPATH:BOOL=NO
 
 //If this value is on, makefiles will be generated without the
 // .SILENT directive, and all commands will be echoed to the console
-// during the make.  This is useful for debugging only. With Visual
+// during the make.  This is useful for debugging only. With serverual
 // Studio IDE projects all commands are done without /nologo.
 CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 

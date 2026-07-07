@@ -57,7 +57,6 @@ FetchContent_Declare(
     GIT_PROGRESS ON
 )
 
-
 # =========================================================
 # MakeAvailable
 # =========================================================
@@ -81,11 +80,21 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS_ORIG}")
 # sqlite3 library
 # =========================================================
 add_library(sqlite3 STATIC sqlite/sqlite3.c)
+set_target_properties(sqlite3 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_options(sqlite3 PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W0>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
 )
 target_include_directories(sqlite3 PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/sqlite
+)
+
+add_library(sqlite3_dll SHARED sqlite/sqlite3.c)
+target_compile_options(sqlite3_dll PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W0>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
+)
+target_include_directories(sqlite3_dll PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/sqlite
 )
 
@@ -101,6 +110,9 @@ target_include_directories(tinycthread PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+# =========================================================
+# imgui
+# =========================================================
 set(IMGUI_SRCS
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -110,7 +122,6 @@ set(IMGUI_SRCS
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
 )
-
 
 add_library(imgui STATIC ${IMGUI_SRCS})
 target_include_directories(imgui PUBLIC
@@ -126,6 +137,7 @@ set(IMPLOT_SOURCE
     implot/implot_demo.cpp
     implot/implot_items.cpp
 )
+
 add_library(implot STATIC ${IMPLOT_SOURCE})
 target_include_directories(implot PUBLIC ${IMPLOT_SOURCE_DIR} ${imgui_SOURCE_DIR})
 target_link_libraries(implot PUBLIC imgui)
@@ -134,8 +146,6 @@ add_library(implot::implot ALIAS implot)
 target_include_directories(implot PUBLIC
     implot/
 )
-target_link_libraries(implot PUBLIC imgui)
-
 
 # =========================================================
 # Optional: make sure external libs don't install by default

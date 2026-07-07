@@ -1,5 +1,5 @@
 --
--- File generated with SQLiteStudio v3.4.21 on Fri Jun 26 02:08:36 2026
+-- File generated with SQLiteStudio v3.4.21 on Fri Jun 26 22:18:05 2026
 --
 -- Text encoding used: UTF-8
 --
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS Data (
     id          INTEGER PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT
                         NOT NULL,
     timestamp   INTEGER NOT NULL,
-    variable_id INTEGER REFERENCES variable (id),
+    variable_id INTEGER REFERENCES variable (id) ON DELETE CASCADE,
     value       REAL
 )
 STRICT;
@@ -32,7 +32,9 @@ CREATE TABLE IF NOT EXISTS variable (
                     NOT NULL,
     name            NOT NULL
                     UNIQUE,
-    unit_id         REFERENCES unit (id) 
+    unit_id         REFERENCES unit (id) ON DELETE NO ACTION
+                                         ON UPDATE NO ACTION
+                                         MATCH SIMPLE
 );
 
 

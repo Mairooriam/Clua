@@ -3,8 +3,11 @@
 #include <imgui.h>
 #include <implot.h>
 
-#include "db_access.h"
+#include <cassert>
+#include <cmath>
+#include <limits>
 
+#include "db_access.h"
 void db_render_measurements(Measurements* meas) {
     if (meas == nullptr) {
         ImGui::TextUnformatted("No measurements (null).");
@@ -61,8 +64,31 @@ void db_render_measurementRecord(MeasurementRecord* record) {
         }
     }
 }
+static int FindNearestIndexMs(const std::vector<int64_t>& xs_ms, double target_s) {
+    if (xs_ms.empty()) {
+        return -1;
+    }
+
+    int best_index = 0;
+    double best_distance = std::abs((double)xs_ms[0] / 1000.0 - target_s);
+
+    for (size_t i = 1; i < xs_ms.size(); ++i) {
+        double distance = std::abs((double)xs_ms[i] / 1000.0 - target_s);
+        if (distance < best_distance) {
+            best_distance = distance;
+            best_index = (int)i;
+        }
+    }
+
+    return best_index;
+}
+
+// TODO:
+// make drag and drop variable to plot. Plot needs to have state that tracks whats added to it
+// also need to create multiple pltos
 
 void db_render_plot_measurementRecord(MeasurementRecord* record) {
+    static bool tooltip = true;
     if (record == nullptr || record->empty()) {
         ImGui::TextUnformatted("No data to plot.");
         return;
@@ -86,10 +112,48 @@ void db_render_plot_measurementRecord(MeasurementRecord* record) {
             }
 
             ImPlot::PlotLine(
-                ht.first.c_str(),
-                ts_double.data(),
-                vals.data(),
-                static_cast<int>(vals.size()));
+                ht.first.c_str(), ts_double.data(), vals.data(), static_cast<int>(vals.size()));
+        }
+
+        if (tooltip && ImPlot::IsPlotHovered()) {
+            ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+
+            const std::string* best_name = nullptr;
+            const Measurements* best_meas = nullptr;
+            int best_index = -1;
+            double best_distance = std::numeric_limits<double>::max();
+
+            for (const auto& [name, meas] : *record) {
+                if (meas.value.empty() || meas.timestamp.empty()) {
+                    continue;
+                }
+                if (meas.value.size() != meas.timestamp.size()) {
+                    continue;
+                }
+
+                int idx = FindNearestIndexMs(meas.timestamp, mouse.x);
+                if (idx < 0) {
+                    continue;
+                }
+
+                double t_s = (double)meas.timestamp[idx] / 1000.0;
+                double distance = std::abs(t_s - mouse.x);
+
+                if (distance < best_distance) {
+                    best_distance = distance;
+                    best_name = &name;
+                    best_meas = &meas;
+                    best_index = idx;
+                }
+            }
+
+            if (best_name != nullptr && best_meas != nullptr && best_index >= 0) {
+                ImGui::BeginTooltip();
+                ImGui::Text("Series: %s", best_name->c_str());
+                ImGui::Text("Time:   %.3f s", (double)best_meas->timestamp[best_index] / 1000.0);
+                ImGui::Text("Value:  %.6f", best_meas->value[best_index]);
+                ImGui::EndTooltip();
+            }
         }
 
         ImPlot::EndPlot();

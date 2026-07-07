@@ -7,6 +7,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 add_subdirectory(external)
 add_subdirectory(clua)
-add_subdirectory(visualization)
+add_subdirectory(database)
 #add_subdirectory(playground)
 

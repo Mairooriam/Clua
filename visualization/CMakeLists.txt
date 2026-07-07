@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.11)
-set(PROJECT_NAME visualization)
-project(Visualization C CXX)
+set(PROJECT_NAME database)
+project(clua_dbualization C CXX)
 
 # Set C standard to C11
 set(CMAKE_C_STANDARD 17)
@@ -42,10 +42,12 @@ set(SOURCES
     src/imgui_SDL3_Vulkan.cpp
 )
 
-add_executable(Vis ${SOURCES})
-target_compile_definitions(Vis PRIVATE LOG_USE_COLOR _CRT_SECURE_NO_WARNINGS)
-target_compile_options(Vis PRIVATE -g -fno-omit-frame-pointer)
-target_include_directories(Vis PRIVATE
+
+#VISUALIZATION
+add_executable(clua_db ${SOURCES})
+target_compile_definitions(clua_db PRIVATE LOG_USE_COLOR _CRT_SECURE_NO_WARNINGS)
+target_compile_options(clua_db PRIVATE -g -fno-omit-frame-pointer)
+target_include_directories(clua_db PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/external
@@ -56,6 +58,28 @@ target_include_directories(Vis PRIVATE
     ${Vulkan_INCLUDE_DIRS}
 )
 
-target_link_options(Vis PRIVATE -rdynamic)
-target_link_libraries(Vis PRIVATE SDL3-static ${Vulkan_LIBRARIES} imgui implot sqlite3)
+target_link_options(clua_db PRIVATE -rdynamic)
+target_link_libraries(clua_db PRIVATE SDL3-static ${Vulkan_LIBRARIES} imgui implot sqlite3)
+
+# OPC UA SERVER
+add_executable(server
+  src/server.c
+)
+target_compile_definitions(server PRIVATE LOG_USE_COLOR _CRT_SECURE_NO_WARNINGS)
+target_compile_options(server PRIVATE -g -fno-omit-frame-pointer)
+target_include_directories(server PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/external
+    # ${imgui_SOURCE_DIR}
+    # ${imgui_SOURCE_DIR}/backends
+    # ${implot_SOURCE_DIR}
+    # ${sdl_SOURCE_DIR}/include
+    # ${Vulkan_INCLUDE_DIRS}
+)
+
+target_link_options(server PRIVATE -rdynamic)
+target_link_libraries(server PRIVATE sqlite3 open62541::open62541)
+
+
 

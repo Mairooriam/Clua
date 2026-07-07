@@ -177,7 +177,7 @@ int iterate_thread(void* ctx) {
     while (g_running) {
         UA_Client_run_iterate(testClient, 100);
         if (cache_count <= 0) {
-            log_trace("Cache is empty");
+            // log_trace("Cache is empty");
             continue;
         } else {
             log_trace("cache has stuff!");
