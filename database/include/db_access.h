@@ -8,6 +8,39 @@ typedef struct sqlite3 sqlite3;
 typedef long long int sqlite_int64;
 typedef sqlite_int64 sqlite3_int64;
 
+/// Ideas to make C style
+///
+///
+//
+// typedef struct arr_f32 {
+//     float* items;
+//     size_t count;
+//     size_t capacity;
+// } arr_f32;
+//
+// typedef struct arr_u64 {
+//     uint64_t* items;
+//     size_t count;
+//     size_t capacity;
+// } arr_u64;
+//
+// typedef struct arr_DataPoints {
+//     arr_u64 timestamp;
+//     arr_f32 value;
+// } arr_DataPoints;
+//
+// typedef struct Measurement {
+//     const char* name;
+//     const char* othermetadata;
+//     arr_DataPoints data;
+// } Measurement;
+//
+// typedef struct arr_Measurements {
+//     Measurement* items;
+//     size_t count;
+//     size_t capacity;
+// } arr_Measurements;
+//
 typedef struct DbContext {
     std::string dbName = "";
     sqlite3* db = nullptr;
