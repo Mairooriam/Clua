@@ -1,3 +1,0 @@
-/home/miro/repositories/implot/example/build/_deps/glfw-subbuild/CMakeFiles/glfw-populate.dir
-/home/miro/repositories/implot/example/build/_deps/glfw-subbuild/CMakeFiles/edit_cache.dir
-/home/miro/repositories/implot/example/build/_deps/glfw-subbuild/CMakeFiles/rebuild_cache.dir
