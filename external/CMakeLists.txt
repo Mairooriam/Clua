@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.19)
+project(external LANGUAGES C CXX)
 include(FetchContent)
 # =========================================================
 # Option: allow user to provide local source directories
@@ -19,8 +21,8 @@ FetchContent_Declare(
         GIT_TAG v1.5.4
         GIT_SHALLOW ON
         GIT_PROGRESS ON
-    )
-
+)
+FetchContent_MakeAvailable(open62541)
 # =========================================================
 # replxx
 # =========================================================
@@ -71,7 +73,7 @@ else()
   string(APPEND CMAKE_C_FLAGS " -w")
 endif()
 
-FetchContent_MakeAvailable(open62541 replxx sdl imgui)
+FetchContent_MakeAvailable(replxx sdl imgui)
 
 # Restore original flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_ORIG}")

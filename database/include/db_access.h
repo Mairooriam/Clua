@@ -1,9 +1,9 @@
 #pragma once
-#include <cstdint>
-#include <string>
-#include <unordered_map>
-#include <vector>
+#include <stdint.h>
 
+#include "../core/allocator.h"
+
+#define DB_ARENA_SIZE KB(4)
 typedef struct sqlite3 sqlite3;
 typedef long long int sqlite_int64;
 typedef sqlite_int64 sqlite3_int64;
@@ -12,62 +12,75 @@ typedef sqlite_int64 sqlite3_int64;
 ///
 ///
 //
-// typedef struct arr_f32 {
-//     float* items;
-//     size_t count;
-//     size_t capacity;
-// } arr_f32;
-//
-// typedef struct arr_u64 {
-//     uint64_t* items;
-//     size_t count;
-//     size_t capacity;
-// } arr_u64;
-//
-// typedef struct arr_DataPoints {
-//     arr_u64 timestamp;
-//     arr_f32 value;
-// } arr_DataPoints;
-//
-// typedef struct Measurement {
-//     const char* name;
-//     const char* othermetadata;
-//     arr_DataPoints data;
-// } Measurement;
-//
-// typedef struct arr_Measurements {
-//     Measurement* items;
-//     size_t count;
-//     size_t capacity;
-// } arr_Measurements;
-//
+typedef struct arr_f32 {
+    float* items;
+    size_t count;
+    size_t capacity;
+} arr_f32;
+arr_f32* arr_f32_create_in_arena(memory_arena* arena, size_t count);
+
+typedef struct arr_i64 {
+    int64_t* items;
+    size_t count;
+    size_t capacity;
+} arr_i64;
+arr_i64* arr_i64_create_in_arena(memory_arena* arena, size_t count);
+
+typedef struct arr_DataPoints {
+    arr_i64 timestamp;
+    arr_f32 value;
+} arr_DataPoints;
+arr_DataPoints* arr_datapoints_create_in_arena(memory_arena* arena, size_t count);
+
+typedef struct Measurement {
+    const char* name;
+    const char* othermetadata;
+    arr_DataPoints data;
+} Measurement;
+Measurement* measurement_create_in_arena(memory_arena* arena, const char* name, size_t count);
+
+typedef struct arr_Measurements {
+    Measurement* items;
+    size_t count;
+    size_t capacity;
+} arr_Measurements;
+
 typedef struct DbContext {
-    std::string dbName = "";
-    sqlite3* db = nullptr;
-    std::string dbSchemaFilename = "";
+    char* dbName;
+    sqlite3* db;
+    char* dbSchemaFilename;
+    memory_arena* arena;
 } DbContext;
+bool db_context_init_from_file(DbContext* ctx, memory_arena* arena, const char* filename);
+bool db_context_init(DbContext* ctx);
 
-struct db_schema_variable {
-    uint64_t id = 0;
-    std::string name = "";
-    uint64_t unit_id = 0;
-};
+typedef struct Db_schema_variable {
+    char* name;
+    uint64_t id;
+    uint64_t unit_id;
+} Db_schema_variable;
 
-struct Measurements {
-    std::vector<int64_t> timestamp;
-    std::vector<double> value;
-};
+typedef struct arr_db_schema_variable {
+    Db_schema_variable* items;
+    size_t count;
+    size_t capacity;
+} arr_db_schema_variables;
+
+// struct Measurements {
+//     std::vector<int64_t> timestamp;
+//     std::vector<double> value;
+// };
 
 // TODO: wrap this in context to have selected stuff. etc. more info
-using MeasurementRecord = std::unordered_map<std::string, Measurements>;
+// using MeasurementRecord = std::unordered_map<std::string, Measurements>;
 
 int db_connect(DbContext* ctx);
 int valid_sqlite_result(int rc, sqlite3* db, const char* context);
-int read_variable_history(sqlite3* db, const char* variable_name, MeasurementRecord* record);
-int init_test_data_writer(sqlite3* db);
-void insert_test_value(sqlite3* db, sqlite3_int64 timestamp_ms, const char* name, double value);
-void shutdown_test_data_writer();
-int db_query_variable_info(sqlite3* db, std::vector<db_schema_variable>& variables);
+int db_read_variable_history(sqlite3* db, Measurement* meas);
+int db_write_begin(sqlite3* db);
+void db_write_end(void);
+void db_write(sqlite3* db, sqlite3_int64 timestamp_ms, const char* name, double value);
+arr_db_schema_variables* db_query_available_variables(sqlite3* db, memory_arena* arena);
 
-std::string db_read_sql_file_filtered(const char* filename);
+char* db_read_sql_schema(DbContext* ctx);
 bool db_exists_in_database(sqlite3* db, const char* variable_name);
