@@ -1,5 +1,6 @@
 #include "allocator.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "log.h"
@@ -48,6 +49,8 @@ void* arena_alloc(memory_arena* arena, size_t size, size_t alignment) {
 
     // overflow-safe bounds check
     if (aligned_offset > arena->size || size > arena->size - aligned_offset) {
+        log_fatal("Arena ran out of memory! no dynamic arena yet!");
+        abort();
         return NULL;
     }
 
