@@ -4,6 +4,7 @@
 -- Text encoding used: UTF-8
 --
 PRAGMA foreign_keys = off;
+PRAGMA journal_mode=WAL;
 BEGIN TRANSACTION;
 
 -- Table: Data

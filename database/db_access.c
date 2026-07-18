@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "core/allocator.h"
-#include "log.h"
+#include "core/log.h"
 #include "nob.h"
 #include "sqlite3.h"
 static sqlite3_stmt* insert_data_stmt = NULL;
@@ -19,7 +19,7 @@ int db_connect(DbContext* ctx) {
         return 0;
     }
 
-    if (ctx->db) {
+    if (ctx->handle) {
         log_warn("db_connect called with existing db. possibly not wanted behavior!");
         return 0;
     }
@@ -29,21 +29,24 @@ int db_connect(DbContext* ctx) {
         return 0;
     }
 
+    arena_set_reset_point_current(ctx->arena);
     char* sql = db_read_sql_schema(ctx);
     if (!sql) {
         log_error("db_connect failed to read sql schema");
         return 0;
     }
 
-    int sql_rc = sqlite3_open(ctx->dbName, &ctx->db);
-    if (!valid_sqlite_result(sql_rc, ctx->db, "db_connect")) {
-        if (ctx->db) sqlite3_close(ctx->db);
+    int sql_rc = sqlite3_open(ctx->dbName, &ctx->handle);
+    if (!valid_sqlite_result(sql_rc, ctx->handle, "db_connect")) {
+        if (ctx->handle) sqlite3_close(ctx->handle);
+        arena_reset(ctx->arena, false);
         return 0;
     }
 
-    sql_rc = sqlite3_exec(ctx->db, sql, NULL, NULL, NULL);
-    if (!valid_sqlite_result(sql_rc, ctx->db, "db_connect")) {
-        if (ctx->db) sqlite3_close(ctx->db);
+    sql_rc = sqlite3_exec(ctx->handle, sql, NULL, NULL, NULL);
+    if (!valid_sqlite_result(sql_rc, ctx->handle, "db_connect")) {
+        if (ctx->handle) sqlite3_close(ctx->handle);
+        arena_reset(ctx->arena, false);
         return 0;
     }
     arena_reset(ctx->arena, false);
@@ -272,9 +275,9 @@ char* db_read_sql_schema(DbContext* ctx) {
 bool db_context_init_from_file(DbContext* ctx, memory_arena* arena, const char* filename) {
     NOB_TODO("Not implemented");
 }
-bool db_context_init(DbContext* ctx) {
-    ctx->db = NULL;
-    ctx->arena = arena_create(DB_ARENA_SIZE);
+bool db_context_init(DbContext* ctx, memory_arena* arena) {
+    ctx->handle = NULL;
+    ctx->arena = arena;
     ctx->dbName = arena_strdup(ctx->arena, "default.db", alignof(char));
     ctx->dbSchemaFilename = arena_strdup(ctx->arena, "schema.txt", alignof(char));
     arena_set_reset_point_current(ctx->arena);
@@ -303,9 +306,13 @@ arr_DataPoints* arr_datapoints_create_in_arena(memory_arena* arena, size_t count
     result->value = *arr_f32_create_in_arena(arena, count);
     return result;
 }
-Measurement* measurement_create_in_arena(memory_arena* arena, const char* name, size_t count) {
+Measurement* measurement_create_in_arena(
+    memory_arena* arena, char* strData, size_t strLenght, size_t count) {
     Measurement* meas = (Measurement*)arena_alloc(arena, sizeof(Measurement), alignof(Measurement));
-    meas->name = arena_strdup(arena, name, alignof(char));
+    meas->arena = arena;
+    // meas->name = arena_strdup(arena, name, alignof(char));
+    meas->name = (char*)arena_alloc(arena, strLenght, alignof(char));
+    memcpy(meas->name, strData, strLenght);
     meas->data.timestamp = *arr_i64_create_in_arena(arena, count);
     meas->data.value = *arr_f32_create_in_arena(arena, count);
     return meas;

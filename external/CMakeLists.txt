@@ -10,7 +10,8 @@ include(FetchContent)
 # =========================================================
 # open62541
 # =========================================================
-set(OPEN62541_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(OPEN62541_BUILD_SHARED ON CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS       ON CACHE BOOL "" FORCE)
 set(UA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(UA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(UA_ENABLE_AMALGAMATION OFF CACHE BOOL "" FORCE)
@@ -92,6 +93,7 @@ target_include_directories(sqlite3 PUBLIC
 )
 
 add_library(sqlite3_dll SHARED sqlite/sqlite3.c)
+set_target_properties(sqlite3_dll PROPERTIES OUTPUT_NAME "sqlite3" POSITION_INDEPENDENT_CODE ON)
 target_compile_options(sqlite3_dll PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W0>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-w>
@@ -149,7 +151,3 @@ target_include_directories(implot PUBLIC
     implot/
 )
 
-# =========================================================
-# Optional: make sure external libs don't install by default
-# =========================================================
-set_directory_properties(PROPERTIES EXCLUDE_FROM_ALL YES)

@@ -49,7 +49,7 @@ set(SOURCES
     # main.c
     db_access.c
     core/allocator.c
-    log.c
+    core/log.c
 )
 
 add_library(clua_db SHARED ${SOURCES})
@@ -67,7 +67,7 @@ target_include_directories(clua_db
 )
 
 # target_link_options(clua_db PRIVATE -rdynamic)
-target_link_libraries(clua_db PRIVATE sqlite3)
+target_link_libraries(clua_db PRIVATE sqlite3_dll)
 
 add_executable(clua_db_example main.c lexer.c parser.c core/string.c)
 target_link_libraries(clua_db_example PUBLIC clua_db open62541::open62541 Threads::Threads)
@@ -80,6 +80,14 @@ add_custom_target(sync_compile_commands ALL
   COMMENT "Copy compile_commands.json to source root"
   VERBATIM
 )
+
+add_custom_command(TARGET clua_db_example POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    $<TARGET_FILE:sqlite3_dll>
+    $<TARGET_FILE_DIR:clua_db_example>
+)
+add_dependencies(clua_db_example sqlite3_dll)
+
 add_dependencies(sync_compile_commands clua_db)
 
 

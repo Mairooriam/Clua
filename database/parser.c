@@ -1,8 +1,8 @@
 #include "parser.h"
 
 #include "core/allocator.h"
+#include "core/log.h"
 #include "lexer.h"
-#include "log.h"
 #include "open62541/types.h"
 
 Token* parser_peek(Parser* p);
@@ -14,7 +14,6 @@ Token parser_current(Parser* p);
 bool parser_parse_header(Parser* p);
 bool parser_match_identifier(Parser* p, Sv wanted);
 bool parser_parse_string_field(Parser* p, Sv name, char** out);
-ARENA_DEFINE_PUSH_FN(da_UA_NodeId_push, da_UA_NodeId, UA_NodeId, 64)
 
 void parser_init(Parser* parser, arr_Tokens* tokens, memory_arena* arena) {
     parser->tokens = tokens;
@@ -71,7 +70,9 @@ Token parser_current(Parser* p) {
     }
 }
 bool parser_parse_header(Parser* p) {
-    const char* expected[] = {"inputs", "opcua", "group", "nodes"};
+    // const char* expected[] = {"inputs", "opcua", "group", "nodes"};
+    const char* expected[] = {"inputs", "opcua", "nodes"};
+
     size_t expected_count = sizeof(expected) / sizeof(expected[0]);
 
     bool found[4] = {false};
@@ -160,12 +161,32 @@ da_UA_NodeId* parser_parse(Parser* p) {
 
         UA_NodeId id;
         UA_NodeId_init(&id);
+        // TODO: make own ua nodeid creator to not use malloc
         UA_String ua_str = UA_String_fromChars(nodeid_str);
         UA_StatusCode status = UA_NodeId_parse(&id, ua_str);
         UA_String_clear(&ua_str);
-
+        // static bool FN_NAME(memory_arena* arena, ARR_T* out, ELEM_T value) {                \
+        //     if (out->count >= out->capacity) {                                              \
+        //         size_t new_cap = out->capacity ? out->capacity * 2 : (DEFAULT_CAP);         \
+        //         ELEM_T* new_items =                                                         \
+        //             (ELEM_T*)arena_alloc(arena, sizeof(ELEM_T) * new_cap, alignof(ELEM_T)); \
+        //         if (!new_items) return false;                                               \
+        //         if (out->items && out->count > 0) {                                         \
+        //             memcpy(new_items, out->items, out->count * sizeof(ELEM_T));             \
+        //         }                                                                           \
+        //         out->items = new_items;                                                     \
+        //         out->capacity = new_cap;                                                    \
+        //     }                                                                               \
+        //     out->items[out->count++] = value;                                               \
+        //     return true;                                                                    \
+        // }
+        //
         if (status == UA_STATUSCODE_GOOD) {
-            da_UA_NodeId_push(p->arena, nodes, id);
+            if (nodes->count >= nodes->capacity) {
+                DA_ARENA_REALLOC(p->arena, nodes, UA_NodeId);
+            }
+            UA_NodeId_copy_arena(p->arena, &id, &nodes->items[nodes->count++]);
+            UA_NodeId_clear(&id);
         } else {
             log_error("Failed to parse NodeId '%s': %s", nodeid_str, UA_StatusCode_name(status));
             UA_NodeId_clear(&id);

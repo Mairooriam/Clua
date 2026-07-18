@@ -6,7 +6,7 @@ project(clua_dbualization C CXX)
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
+set(CMAKE_C_EXTENSIONS ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_compile_definitions(_AMD64_)
@@ -78,8 +78,8 @@ target_include_directories(server PRIVATE
     # ${Vulkan_INCLUDE_DIRS}
 )
 
-target_link_options(server PRIVATE -rdynamic)
-target_link_libraries(server PRIVATE sqlite3 open62541::open62541)
+target_link_options(server PRIVATE)
+target_link_libraries(server PRIVATE sqlite3 open62541::open62541 m)
 
 
 

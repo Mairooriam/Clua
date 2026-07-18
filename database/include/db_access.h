@@ -33,11 +33,13 @@ typedef struct arr_DataPoints {
 arr_DataPoints* arr_datapoints_create_in_arena(memory_arena* arena, size_t count);
 
 typedef struct Measurement {
-    const char* name;
+    char* name;
     const char* othermetadata;
+    memory_arena* arena;
     arr_DataPoints data;
 } Measurement;
-Measurement* measurement_create_in_arena(memory_arena* arena, const char* name, size_t count);
+Measurement* measurement_create_in_arena(
+    memory_arena* arena, char* strData, size_t strLenght, size_t count);
 
 typedef struct arr_Measurements {
     Measurement* items;
@@ -47,12 +49,23 @@ typedef struct arr_Measurements {
 
 typedef struct DbContext {
     char* dbName;
-    sqlite3* db;
+    sqlite3* handle;
     char* dbSchemaFilename;
     memory_arena* arena;
 } DbContext;
 bool db_context_init_from_file(DbContext* ctx, memory_arena* arena, const char* filename);
-bool db_context_init(DbContext* ctx);
+bool db_context_init(DbContext* ctx, memory_arena* arena);
+
+typedef struct MonitoredItem {
+    uint32_t subId;
+    uint32_t monId;
+} MonitoredItem;
+
+typedef struct arr_MonitoredItem {
+    MonitoredItem* items;
+    size_t count;
+    size_t capacity;
+} arr_MonitoredItem;
 
 typedef struct Db_schema_variable {
     char* name;
@@ -65,14 +78,6 @@ typedef struct arr_db_schema_variable {
     size_t count;
     size_t capacity;
 } arr_db_schema_variables;
-
-// struct Measurements {
-//     std::vector<int64_t> timestamp;
-//     std::vector<double> value;
-// };
-
-// TODO: wrap this in context to have selected stuff. etc. more info
-// using MeasurementRecord = std::unordered_map<std::string, Measurements>;
 
 int db_connect(DbContext* ctx);
 int valid_sqlite_result(int rc, sqlite3* db, const char* context);

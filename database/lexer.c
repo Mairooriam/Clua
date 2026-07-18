@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #include "core/allocator.h"
-#include "log.h"
+#include "core/log.h"
 #include "nob.h"
 
 bool lx_isAtEnd(Scanner* scanner);
@@ -13,14 +13,12 @@ void lx_advance(Scanner* scanner);
 Token lx_token_create_scanner(Scanner* scanner, TokenType type);
 Token lx_token_create(TokenType type, const char* data, size_t lenght, int line, int column);
 Token lx_scanToken(Scanner* scanner);
-ARENA_DEFINE_PUSH_FN(arr_tokens_push, arr_Tokens, Token, 128)
 #define LX_TOKEN_FMT                                                                       \
     C_RESET "type=" C_GREEN "%-15s" C_RESET " line=" C_YELLOW "%-5d" C_RESET " col=" C_RED \
             "%-5d" C_RESET " text=\"" C_GREEN SV_FTM C_RESET
 
 void lx_init(Scanner* scanner, const char* source, memory_arena* _arena) {
     scanner->sv = sv_create_from_cstr(source);
-    ;
     scanner->start = 0;
     scanner->current = 0;
     scanner->line_start = 0;
@@ -194,7 +192,7 @@ arr_Tokens* lx_tokenize(Scanner* scanner) {
 
     for (;;) {
         Token t = lx_scanToken(scanner);
-        arr_tokens_push(scanner->arena, tokens, t);
+        ARENA_PUSH(scanner->arena, tokens, Token, t);
         if (t.type == TOKEN_EOF) break;
     }
     return tokens;

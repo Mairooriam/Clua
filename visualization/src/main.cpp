@@ -87,8 +87,8 @@ int main(int, char**) {
     ImPlot::CreateContext();
 
     DbContext dbCtx;
-    dbCtx.dbName = "data.db";
-    dbCtx.dbSchemaFilename = "sql.txt";
+    dbCtx.dbName = "default.db";
+    dbCtx.dbSchemaFilename = "schema.txt";
     int res = db_connect(&dbCtx);
 
     if (!init_test_data_writer(dbCtx.db)) {
@@ -116,36 +116,36 @@ int main(int, char**) {
                 done = true;
             }
         }
-        if (frame_counter % 60 == 0) {
-            insert_test_value(
-                dbCtx.db, timestamp_ms, "test1", 21.0 + std::sin(frame_counter * 0.01) * 2.0);
-        }
-
-        if (frame_counter % 120 == 0) {
-            insert_test_value(
-                dbCtx.db,
-                timestamp_ms,
-                "test2",
-                101325.0 + std::sin(frame_counter * 0.005) * 100.0);
-        }
-
-        if (frame_counter % 300 == 0) {
-            insert_test_value(
-                dbCtx.db, timestamp_ms, "test3", 50.0 + std::sin(frame_counter * 0.008) * 10.0);
-        }
-
-        if (frame_counter % 600 == 0) {
-            insert_test_value(
-                dbCtx.db, timestamp_ms, "test4", 12.0 + std::sin(frame_counter * 0.02) * 0.2);
-        }
-
-        if (frame_counter % 30 == 0) {
-            int res = -1;
-            // res = read_variable_history(dbCtx.db, "temperature", &record);
-            // res = read_variable_history(dbCtx.db, "tatu", &record);
-            // res = read_variable_history(dbCtx.db, "teemu", &record);
-            // res = read_variable_history(dbCtx.db, "voltage", &record);
-        }
+        // if (frame_counter % 60 == 0) {
+        //     insert_test_value(
+        //         dbCtx.db, timestamp_ms, "test1", 21.0 + std::sin(frame_counter * 0.01) * 2.0);
+        // }
+        //
+        // if (frame_counter % 120 == 0) {
+        //     insert_test_value(
+        //         dbCtx.db,
+        //         timestamp_ms,
+        //         "test2",
+        //         101325.0 + std::sin(frame_counter * 0.005) * 100.0);
+        // }
+        //
+        // if (frame_counter % 300 == 0) {
+        //     insert_test_value(
+        //         dbCtx.db, timestamp_ms, "test3", 50.0 + std::sin(frame_counter * 0.008) * 10.0);
+        // }
+        //
+        // if (frame_counter % 600 == 0) {
+        //     insert_test_value(
+        //         dbCtx.db, timestamp_ms, "test4", 12.0 + std::sin(frame_counter * 0.02) * 0.2);
+        // }
+        //
+        // if (frame_counter % 30 == 0) {
+        //     int res = -1;
+        // res = read_variable_history(dbCtx.db, "temperature", &record);
+        // res = read_variable_history(dbCtx.db, "tatu", &record);
+        // res = read_variable_history(dbCtx.db, "teemu", &record);
+        // res = read_variable_history(dbCtx.db, "voltage", &record);
+        // }
 
         // [If using SDL_MAIN_USE_CALLBACKS: all code below would likely be your SDL_AppIterate()
         // function]

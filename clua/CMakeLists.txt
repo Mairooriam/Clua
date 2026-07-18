@@ -28,8 +28,6 @@ else()
         -fdiagnostics-color=always
         -Wno-newline-eof
     )
-  # Enforce static linking
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
 endif()
 
 # Source files
@@ -53,7 +51,7 @@ target_include_directories(main PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/modules
 )
 target_link_libraries(main PRIVATE
-    open62541
+    open62541::open62541
     replxx::replxx
     tinycthread
     sqlite3
