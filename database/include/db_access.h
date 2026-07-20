@@ -7,6 +7,7 @@
 typedef struct sqlite3 sqlite3;
 typedef long long int sqlite_int64;
 typedef sqlite_int64 sqlite3_int64;
+typedef struct sqlite3_stmt sqlite3_stmt;
 
 /// Ideas to make C style
 ///
@@ -48,15 +49,13 @@ typedef struct arr_Measurements {
 } arr_Measurements;
 
 typedef struct DbContext {
-    char* dbName;
     sqlite3* handle;
-    char* dbSchemaFilename;
-    memory_arena* arena;
+    sqlite3_stmt* insert_data_stmt;
 } DbContext;
-bool db_context_init_from_file(DbContext* ctx, memory_arena* arena, const char* filename);
-bool db_context_init(DbContext* ctx, memory_arena* arena);
+void db_context_init(DbContext* ctx);
 
 typedef struct MonitoredItem {
+    uint32_t nodeIdx;
     uint32_t subId;
     uint32_t monId;
 } MonitoredItem;
@@ -79,13 +78,13 @@ typedef struct arr_db_schema_variable {
     size_t capacity;
 } arr_db_schema_variables;
 
-int db_connect(DbContext* ctx);
+int db_connect(DbContext* ctx, const char* dbName, char* schema);
 int valid_sqlite_result(int rc, sqlite3* db, const char* context);
 int db_read_variable_history(sqlite3* db, Measurement* meas);
-int db_write_begin(sqlite3* db);
-void db_write_end(void);
-void db_write(sqlite3* db, sqlite3_int64 timestamp_ms, const char* name, double value);
+int db_write_begin(DbContext* db);
+void db_write_end(DbContext* ctx);
+void db_write(DbContext* ctx, sqlite3_int64 timestamp_ms, const char* name, double value);
 arr_db_schema_variables* db_query_available_variables(sqlite3* db, memory_arena* arena);
 
-char* db_read_sql_schema(DbContext* ctx);
+char* db_read_sql_schema(const char* schemaFilename, memory_arena* arena);
 bool db_exists_in_database(sqlite3* db, const char* variable_name);

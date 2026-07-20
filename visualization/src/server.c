@@ -63,7 +63,39 @@ int main(int argc, char* argv[]) {
         NULL,
         NULL);
     UA_VariableAttributes_clear(&attrCnt);
+    /* create many variables */
+    const int N_VARS = 100;
+    UA_NodeId* varNodeIds = malloc(sizeof(UA_NodeId) * N_VARS);
+    UA_QualifiedName* varNames = malloc(sizeof(UA_QualifiedName) * N_VARS);
 
+    for (int i = 0; i < N_VARS; ++i) {
+        char idBuf[32];
+        char nameBuf[32];
+        snprintf(idBuf, sizeof(idBuf), "var.%d", i);
+        snprintf(nameBuf, sizeof(nameBuf), "Var %d", i);
+
+        UA_VariableAttributes attr = UA_VariableAttributes_default;
+        double initValue = 0.0;
+        UA_Variant_setScalarCopy(&attr.value, &initValue, &UA_TYPES[UA_TYPES_DOUBLE]);
+        attr.dataType = UA_TYPES[UA_TYPES_DOUBLE].typeId;
+        attr.displayName = UA_LOCALIZEDTEXT_ALLOC("en-US", nameBuf);
+
+        varNodeIds[i] = UA_NODEID_STRING_ALLOC(1, idBuf);
+        varNames[i] = UA_QUALIFIEDNAME_ALLOC(1, nameBuf);
+
+        UA_Server_addVariableNode(
+            server,
+            varNodeIds[i],
+            UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+            UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES),
+            varNames[i],
+            UA_NODEID_NULL,
+            attr,
+            NULL,
+            NULL);
+
+        UA_VariableAttributes_clear(&attr);
+    }
     /* Add a time string variable */
     UA_VariableAttributes attrTime = UA_VariableAttributes_default;
     UA_String timeInit = UA_STRING_NULL;
@@ -113,6 +145,14 @@ int main(int argc, char* argv[]) {
         UA_Server_writeValue(server, cntNodeId, v);
         UA_Variant_clear(&v);
 
+        /* inside the main update loop, update all variables */
+        for (int i = 0; i < N_VARS; ++i) {
+            double val = sin(t + i * 0.1) + i; /* any test pattern */
+            UA_Variant v;
+            UA_Variant_setScalarCopy(&v, &val, &UA_TYPES[UA_TYPES_DOUBLE]);
+            UA_Server_writeValue(server, varNodeIds[i], v);
+            UA_Variant_clear(&v);
+        }
         /* time string */
         time_t now = time(NULL);
         char buf[64] = "";

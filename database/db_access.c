@@ -11,45 +11,24 @@
 #include "core/log.h"
 #include "nob.h"
 #include "sqlite3.h"
-static sqlite3_stmt* insert_data_stmt = NULL;
 
-int db_connect(DbContext* ctx) {
-    if (ctx->dbName == NULL) {
-        log_error("db_connect called without db name!");
-        return 0;
-    }
+int db_connect(DbContext* ctx, const char* dbName, char* schema) {
+    // TODO: handle assert probably not needed
+    NOB_ASSERT(!ctx->handle && "hanlde already intialized. call without already init");
+    NOB_ASSERT(dbName && "dbName supplied was invalid");
+    NOB_ASSERT(schema && "schema supplied was invalid");
 
-    if (ctx->handle) {
-        log_warn("db_connect called with existing db. possibly not wanted behavior!");
-        return 0;
-    }
-
-    if (ctx->dbSchemaFilename == NULL) {
-        log_warn("db_connect Called without dbSchemaFilename!");
-        return 0;
-    }
-
-    arena_set_reset_point_current(ctx->arena);
-    char* sql = db_read_sql_schema(ctx);
-    if (!sql) {
-        log_error("db_connect failed to read sql schema");
-        return 0;
-    }
-
-    int sql_rc = sqlite3_open(ctx->dbName, &ctx->handle);
+    int sql_rc = sqlite3_open(dbName, &ctx->handle);
     if (!valid_sqlite_result(sql_rc, ctx->handle, "db_connect")) {
         if (ctx->handle) sqlite3_close(ctx->handle);
-        arena_reset(ctx->arena, false);
         return 0;
     }
 
-    sql_rc = sqlite3_exec(ctx->handle, sql, NULL, NULL, NULL);
+    sql_rc = sqlite3_exec(ctx->handle, schema, NULL, NULL, NULL);
     if (!valid_sqlite_result(sql_rc, ctx->handle, "db_connect")) {
         if (ctx->handle) sqlite3_close(ctx->handle);
-        arena_reset(ctx->arena, false);
         return 0;
     }
-    arena_reset(ctx->arena, false);
     return 1;
 }
 
@@ -203,42 +182,42 @@ int db_read_variable_history(sqlite3* db, Measurement* meas) {
     return 1;
 }
 
-void db_write(sqlite3* db, sqlite3_int64 timestamp_ms, const char* name, double value) {
-    sqlite3_reset(insert_data_stmt);
-    sqlite3_clear_bindings(insert_data_stmt);
+void db_write(DbContext* ctx, sqlite3_int64 timestamp_ms, const char* name, double value) {
+    sqlite3_reset(ctx->insert_data_stmt);
+    sqlite3_clear_bindings(ctx->insert_data_stmt);
 
-    int rc = sqlite3_bind_int64(insert_data_stmt, 1, timestamp_ms);
-    valid_sqlite_result(rc, db, "bind timestamp");
+    int rc = sqlite3_bind_int64(ctx->insert_data_stmt, 1, timestamp_ms);
+    valid_sqlite_result(rc, ctx->handle, "bind timestamp");
 
-    rc = sqlite3_bind_text(insert_data_stmt, 2, name, -1, NULL);
-    valid_sqlite_result(rc, db, "bind name");
+    rc = sqlite3_bind_text(ctx->insert_data_stmt, 2, name, -1, NULL);
+    valid_sqlite_result(rc, ctx->handle, "bind name");
 
-    rc = sqlite3_bind_double(insert_data_stmt, 3, value);
-    valid_sqlite_result(rc, db, "bind value");
+    rc = sqlite3_bind_double(ctx->insert_data_stmt, 3, value);
+    valid_sqlite_result(rc, ctx->handle, "bind value");
 
-    rc = sqlite3_step(insert_data_stmt);
+    rc = sqlite3_step(ctx->insert_data_stmt);
 
     if (rc != SQLITE_DONE) {
-        valid_sqlite_result(rc, db, "insert data");
+        valid_sqlite_result(rc, ctx->handle, "insert data");
     }
 }
-int db_write_begin(sqlite3* db) {
+int db_write_begin(DbContext* ctx) {
     static const char sql[] =
         "INSERT INTO DataByName (timestamp, variable_name, value)\n"
         "VALUES (?1, ?2, ?3);\n";
 
-    int rc = sqlite3_prepare_v2(db, sql, -1, &insert_data_stmt, NULL);
-    return valid_sqlite_result(rc, db, "prepare data insert");
+    int rc = sqlite3_prepare_v2(ctx->handle, sql, -1, &ctx->insert_data_stmt, NULL);
+    return valid_sqlite_result(rc, ctx->handle, "prepare data insert");
 }
-void db_write_end(void) {
-    if (insert_data_stmt != NULL) {
-        sqlite3_finalize(insert_data_stmt);
-        insert_data_stmt = NULL;
+void db_write_end(DbContext* ctx) {
+    if (ctx->insert_data_stmt != NULL) {
+        sqlite3_finalize(ctx->insert_data_stmt);
+        ctx->insert_data_stmt = NULL;
     }
 }
 
-char* db_read_sql_schema(DbContext* ctx) {
-    FILE* fp = fopen(ctx->dbSchemaFilename, "r");
+char* db_read_sql_schema(const char* schemaFilename, memory_arena* arena) {
+    FILE* fp = fopen(schemaFilename, "r");
     if (!fp) return NULL;
 
     fseek(fp, 0, SEEK_END);
@@ -250,7 +229,7 @@ char* db_read_sql_schema(DbContext* ctx) {
         return NULL;
     }
 
-    char* buf = (char*)arena_alloc(ctx->arena, (size_t)file_size + 1, alignof(char));
+    char* buf = (char*)arena_alloc(arena, (size_t)file_size + 1, alignof(char));
     if (!buf) {
         fclose(fp);
         return NULL;
@@ -272,16 +251,8 @@ char* db_read_sql_schema(DbContext* ctx) {
     fclose(fp);
     return buf;
 }
-bool db_context_init_from_file(DbContext* ctx, memory_arena* arena, const char* filename) {
-    NOB_TODO("Not implemented");
-}
-bool db_context_init(DbContext* ctx, memory_arena* arena) {
-    ctx->handle = NULL;
-    ctx->arena = arena;
-    ctx->dbName = arena_strdup(ctx->arena, "default.db", alignof(char));
-    ctx->dbSchemaFilename = arena_strdup(ctx->arena, "schema.txt", alignof(char));
-    arena_set_reset_point_current(ctx->arena);
-    return true;
+void db_context_init(DbContext* ctx) {
+    memset(ctx, 0, sizeof(DbContext));
 }
 arr_f32* arr_f32_create_in_arena(memory_arena* arena, size_t count) {
     arr_f32* result = (arr_f32*)arena_alloc(arena, sizeof(arr_f32), alignof(arr_f32));

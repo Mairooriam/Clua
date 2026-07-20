@@ -70,6 +70,9 @@ target_include_directories(clua_db
 target_link_libraries(clua_db PRIVATE sqlite3_dll)
 
 add_executable(clua_db_example main.c lexer.c parser.c core/string.c)
+enable_strict(clua_db_example)
+enable_sanitizers(clua_db_example)
+
 target_link_libraries(clua_db_example PUBLIC clua_db open62541::open62541 Threads::Threads)
 
 # Keep compile_commands.json in repo root for LSP/tools

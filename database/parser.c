@@ -165,22 +165,7 @@ da_UA_NodeId* parser_parse(Parser* p) {
         UA_String ua_str = UA_String_fromChars(nodeid_str);
         UA_StatusCode status = UA_NodeId_parse(&id, ua_str);
         UA_String_clear(&ua_str);
-        // static bool FN_NAME(memory_arena* arena, ARR_T* out, ELEM_T value) {                \
-        //     if (out->count >= out->capacity) {                                              \
-        //         size_t new_cap = out->capacity ? out->capacity * 2 : (DEFAULT_CAP);         \
-        //         ELEM_T* new_items =                                                         \
-        //             (ELEM_T*)arena_alloc(arena, sizeof(ELEM_T) * new_cap, alignof(ELEM_T)); \
-        //         if (!new_items) return false;                                               \
-        //         if (out->items && out->count > 0) {                                         \
-        //             memcpy(new_items, out->items, out->count * sizeof(ELEM_T));             \
-        //         }                                                                           \
-        //         out->items = new_items;                                                     \
-        //         out->capacity = new_cap;                                                    \
-        //     }                                                                               \
-        //     out->items[out->count++] = value;                                               \
-        //     return true;                                                                    \
-        // }
-        //
+
         if (status == UA_STATUSCODE_GOOD) {
             if (nodes->count >= nodes->capacity) {
                 DA_ARENA_REALLOC(p->arena, nodes, UA_NodeId);
