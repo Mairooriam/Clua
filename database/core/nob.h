@@ -408,6 +408,22 @@ NOBDEF void nob_dir_entry_close(Nob_Dir_Entry dir);
     }                                                                          \
   } while (0)
 
+#define nob_da_arena_reserve(da, expected_capacity)                            \
+  do {                                                                         \
+    if ((expected_capacity) > (da)->capacity) {                                \
+      if ((da)->capacity == 0) {                                               \
+        (da)->capacity = NOB_DA_INIT_CAP;                                      \
+      }                                                                        \
+      while ((expected_capacity) > (da)->capacity) {                           \
+        (da)->capacity *= 2;                                                   \
+      }                                                                        \
+      (da)->items = NOB_DECLTYPE_CAST((da)->items)                             \
+          NOB_REALLOC((da)->items, (da)->capacity * sizeof(*(da)->items));     \
+      NOB_ASSERT((da)->items != NULL && "Buy more RAM lol");                   \
+    }                                                                          \
+  } while (0)
+
+
 // Append an item to a dynamic array
 #define nob_da_append(da, item)                                                \
   do {                                                                         \
@@ -425,6 +441,15 @@ NOBDEF void nob_dir_entry_close(Nob_Dir_Entry dir);
            (new_items_count) * sizeof(*(da)->items));                          \
     (da)->count += (new_items_count);                                          \
   } while (0)
+
+#define nob_da_arena_append_many(da, new_items, new_items_count)               \
+  do {                                                                         \
+    nob_da_arena_reserve((da), (da)->count + (new_items_count));               \
+    memcpy((da)->items + (da)->count, (new_items),                             \
+           (new_items_count) * sizeof(*(da)->items));                          \
+    (da)->count += (new_items_count);                                          \
+  } while (0)
+
 
 #define nob_da_resize(da, new_size)                                            \
   do {                                                                         \

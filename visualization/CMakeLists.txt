@@ -44,22 +44,22 @@ set(SOURCES
 
 
 #VISUALIZATION
-add_executable(clua_db2 ${SOURCES})
-target_compile_definitions(clua_db2 PRIVATE LOG_USE_COLOR _CRT_SECURE_NO_WARNINGS)
-target_compile_options(clua_db2 PRIVATE -g -fno-omit-frame-pointer)
-target_include_directories(clua_db2 PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/external
-    ${imgui_SOURCE_DIR}
-    ${imgui_SOURCE_DIR}/backends
-    ${implot_SOURCE_DIR}
-    ${sdl_SOURCE_DIR}/include
-    ${Vulkan_INCLUDE_DIRS}
-)
-
-target_link_options(clua_db2 PRIVATE -rdynamic)
-target_link_libraries(clua_db2 PRIVATE SDL3-static ${Vulkan_LIBRARIES} imgui implot sqlite3)
+# add_executable(clua_db2 ${SOURCES})
+# target_compile_definitions(clua_db2 PRIVATE LOG_USE_COLOR _CRT_SECURE_NO_WARNINGS)
+# target_compile_options(clua_db2 PRIVATE -g -fno-omit-frame-pointer)
+# target_include_directories(clua_db2 PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/src
+#     ${CMAKE_CURRENT_SOURCE_DIR}/external
+#     ${imgui_SOURCE_DIR}
+#     ${imgui_SOURCE_DIR}/backends
+#     ${implot_SOURCE_DIR}
+#     ${sdl_SOURCE_DIR}/include
+#     ${Vulkan_INCLUDE_DIRS}
+# )
+#
+# target_link_options(clua_db2 PRIVATE -rdynamic)
+# target_link_libraries(clua_db2 PRIVATE SDL3-static ${Vulkan_LIBRARIES} imgui implot sqlite3)
 
 # OPC UA SERVER
 add_executable(server

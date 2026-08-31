@@ -1,16 +1,23 @@
 #pragma once
 
+#include <assert.h>
+#include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "allocator.h"
 #include "log.h"
+#include "nob.h"
 
 char* fs_read_file(const char* filepath, memory_arena* arena);
 int64_t now_ms(void);
 bool fs_file_has_changed(const char* filepath, time_t lastTouch);
 time_t fs_file_get_last_touch(const char* filepath);
+int fs_get_executable_dir(char* buf, size_t size);
+int fs_sb_get_executable_dir(String_Builder* sb);
 
 char* fs_read_file(const char* filepath, memory_arena* arena) {
     char* buf = NULL;
@@ -67,4 +74,49 @@ time_t fs_file_get_last_touch(const char* filepath) {
     struct stat st;
     stat(filepath, &st);
     return st.st_mtime;
+}
+
+int fs_get_executable_dir(char* buf, size_t bufsize) {
+    char _buf[PATH_MAX];
+    ssize_t size = readlink("/proc/self/exe", _buf, PATH_MAX);
+    if (size < 0) {
+        return -1;
+    }
+    size_t sizeWithNull = (size_t)size + 1;
+    if (buf == NULL | bufsize == 0) {
+        return (int)sizeWithNull;
+    }
+
+    if (bufsize < sizeWithNull) {
+        return -1;
+    }
+
+    _buf[size + 1] = '\0';
+    memcpy(buf, _buf, sizeWithNull);
+    return (int)sizeWithNull;
+}
+int fs_sb_get_executable_dir(String_Builder* sb) {
+    if (sb == NULL) {
+        return -1;
+    }
+
+    char _buf[PATH_MAX];
+    ssize_t size = readlink("/proc/self/exe", _buf, PATH_MAX - 1);
+    if (size < 0) {
+        return -1;
+    }
+
+    _buf[size] = '\0';
+
+    char* slash = strrchr(_buf, '/');
+    size_t dirLen = 0;
+    if (slash != NULL) {
+        dirLen = (slash == _buf) ? 1 : (size_t)(slash - _buf);
+    }
+
+    if (dirLen > 0) {
+        sb_append_buf(sb, _buf, dirLen);
+    }
+
+    return (int)dirLen;
 }

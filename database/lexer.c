@@ -5,7 +5,7 @@
 
 #include "core/allocator.h"
 #include "core/log.h"
-#include "nob.h"
+#include "core/nob.h"
 
 bool lx_isAtEnd(Scanner* scanner);
 char lx_peek(Scanner* scanner);

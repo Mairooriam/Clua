@@ -1,14 +1,10 @@
 cmake_minimum_required(VERSION 3.11)
 set(PROJECT_NAME database)
-project(clua_dbualization C CXX)
+project(clua_db C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
-
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -84,12 +80,22 @@ add_custom_target(sync_compile_commands ALL
   VERBATIM
 )
 
+# Copy schema to bin
+# TODO: remove the schema txt file and have it in code?
+add_custom_target(copy_schema ALL
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_SOURCE_DIR}/schema.txt
+          ${CMAKE_BINARY_DIR}/schema.txt
+  COMMENT "Copy schema.txt to bin dir"
+  VERBATIM
+)
+
 add_custom_command(TARGET clua_db_example POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     $<TARGET_FILE:sqlite3_dll>
     $<TARGET_FILE_DIR:clua_db_example>
 )
-add_dependencies(clua_db_example sqlite3_dll)
+add_dependencies(clua_db_example sqlite3_dll copy_schema)
 
 add_dependencies(sync_compile_commands clua_db)
 

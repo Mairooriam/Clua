@@ -1,7 +1,8 @@
 #pragma once
+#include <string.h>
+
 #include "../core/allocator.h"
 #include "stdbool.h"
-#include <string.h>
 #define SV_FTM "%.*s"
 #define SV_ARG(sv) ((int)sv.count), sv.data
 #define SV_LIT(s) ((Sv){.data = (s), .count = sizeof(s) - 1})
@@ -30,12 +31,13 @@
 #define C_BCYAN "\x1b[96m"
 
 typedef struct Sv {
-  const char *data;
-  size_t count;
+    const char* data;
+    size_t count;
 } Sv;
 
-Sv sv_create_from_cstr(const char *str);
+// TODO: use nob.h?
+Sv sv_create_from_cstr(const char* str);
 bool sv_equal(Sv a, Sv b);
-Sv sv2_chop_by_delim(Sv *sv, char delim);
-Sv sv2_from_parts(const char *data, size_t count);
-char *sv_to_cstr_arena(memory_arena *arena, Sv sv);
+Sv sv2_chop_by_delim(Sv* sv, char delim);
+Sv sv2_from_parts(const char* data, size_t count);
+char* sv_to_cstr_arena(memory_arena* arena, Sv sv);

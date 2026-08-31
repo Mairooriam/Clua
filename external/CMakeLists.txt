@@ -12,7 +12,7 @@ include(FetchContent)
 # =========================================================
 set(OPEN62541_BUILD_SHARED ON CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS       ON CACHE BOOL "" FORCE)
-set(UA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(UA_BUILD_EXAMPLES ON CACHE BOOL "" FORCE)
 set(UA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(UA_ENABLE_AMALGAMATION OFF CACHE BOOL "" FORCE)
 
@@ -24,6 +24,13 @@ FetchContent_Declare(
         GIT_PROGRESS ON
 )
 FetchContent_MakeAvailable(open62541)
+
+# open62541 enables -Wc++-compat globally; drop it for the parent project.
+if(NOT MSVC)
+    string(REPLACE "-Wc++-compat" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+    string(REGEX REPLACE "[ ]+" " " CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+    string(STRIP "${CMAKE_C_FLAGS}" CMAKE_C_FLAGS)
+endif()
 # =========================================================
 # replxx
 # =========================================================

@@ -8,6 +8,13 @@ Currently has basic browsing and saving of nodes in fromat for telegraf.
 
 C Learning repository. AI has touched the code. Memory leaks present. bad code present.
 
+## Build
+
+cmake ..
+cmake -S .. -DCMAKE_BUILD_TYPE=Debug
+
+cmake --build .
+
 ## Browse and save
 ![Demo GIF](Resources/browse_and_save.gif)
 ## config

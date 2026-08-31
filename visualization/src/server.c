@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < N_VARS; ++i) {
         char idBuf[32];
         char nameBuf[32];
-        snprintf(idBuf, sizeof(idBuf), "var.%d", i);
+        snprintf(idBuf, sizeof(idBuf), "var%d", i);
         snprintf(nameBuf, sizeof(nameBuf), "Var %d", i);
 
         UA_VariableAttributes attr = UA_VariableAttributes_default;

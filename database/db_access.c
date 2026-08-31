@@ -9,7 +9,7 @@
 
 #include "core/allocator.h"
 #include "core/log.h"
-#include "nob.h"
+#include "core/nob.h"
 #include "sqlite3.h"
 
 int db_connect(DbContext* ctx, const char* dbName, char* schema) {

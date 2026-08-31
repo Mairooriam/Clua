@@ -1,5 +1,6 @@
 
 
+#include <linux/limits.h>
 #include <open62541/plugin/log_stdout.h>
 #include <stdalign.h>
 #include <stdint.h>
@@ -11,9 +12,9 @@
 #include <unistd.h>
 
 #include "core/allocator.h"
-#include "core/core.h"
 #include "core/fileio.h"
 #include "core/log.h"
+#include "core/nob.h"
 #include "include/db_access.h"
 #include "lexer.h"
 #include "open62541/client.h"
@@ -23,6 +24,10 @@
 #include "parser.h"
 
 typedef struct uadb_context {
+    String_Builder executableDir;
+    // char* executableDir;
+    const char* dbDir;
+    const char* configDir;
     UA_Client* client;
     da_UA_NodeId* nodes;
     bool connected;
@@ -40,14 +45,6 @@ typedef struct uadb_context {
     DbContext db;
 } uadb_context;
 
-// static void deleteSubscriptionCallback(
-//     UA_Client* client, UA_UInt32 subscriptionId, void* subscriptionContext) {
-//     UA_LOG_INFO(
-//         UA_Log_Stdout,
-//         UA_LOGCATEGORY_APPLICATION,
-//         "Subscription Id %u was deleted",
-//         subscriptionId);
-// }
 static void handler_TheAnswerChanged(
     UA_Client* client,
     UA_UInt32 subId,
@@ -195,17 +192,142 @@ static int mirua_subscription_create(
             handler_TheAnswerChanged,
             NULL);
         if (monRet.statusCode == UA_STATUSCODE_GOOD) {
-            log_trace("Subscription created, subId=%u", subId);
+            log_trace("MonitoredItem created, subId=%u", subId);
         } else {
             // TODO: add nodeid that was invalkid into logging.
             log_warn("Failed to create monitored item: %s", UA_StatusCode_name(monRet.statusCode));
-            return 0;
+            continue;
         }
 
         MonitoredItem monItem = (MonitoredItem){
             .nodeIdx = (uint32_t)i, .subId = subId, .monId = monRet.monitoredItemId};
         ARENA_PUSH(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
     }
+    return 1;
+}
+static int mirua_subscription_create2(
+    UA_Client* client, da_UA_NodeId* nodes, uint32_t* currentSubId) {
+    uadb_context* ctx = (uadb_context*)UA_Client_getContext(client);
+
+    UA_CreateSubscriptionRequest subRequest = UA_CreateSubscriptionRequest_default();
+    UA_CreateSubscriptionResponse subResponse =
+        UA_Client_Subscriptions_create(client, subRequest, NULL, NULL, NULL);
+    if (subResponse.responseHeader.serviceResult != UA_STATUSCODE_GOOD) {
+        log_error(
+            "Failed to create subscription: %s",
+            UA_StatusCode_name(subResponse.responseHeader.serviceResult));
+        return 0;
+    }
+    UA_UInt32 subId = subResponse.subscriptionId;
+    *currentSubId = subId;
+
+    size_t count = nodes->count;
+    UA_MonitoredItemCreateRequest* monRequests =
+        malloc(count * sizeof(UA_MonitoredItemCreateRequest));
+    UA_Client_DataChangeNotificationCallback* callbacks =
+        malloc(count * sizeof(UA_Client_DataChangeNotificationCallback));
+    void** contexts_arr = malloc(count * sizeof(void*));
+
+    if (!monRequests || !callbacks || !contexts_arr) {
+        free(monRequests);
+        free(callbacks);
+        free(contexts_arr);
+        return 0;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        monRequests[i] = UA_MonitoredItemCreateRequest_default(nodes->items[i]);
+        callbacks[i] = handler_TheAnswerChanged;
+        contexts_arr[i] = NULL;
+    }
+
+    UA_CreateMonitoredItemsRequest req;
+    UA_CreateMonitoredItemsRequest_init(&req);
+    req.subscriptionId = subId;
+    req.timestampsToReturn = UA_TIMESTAMPSTORETURN_BOTH;
+    req.itemsToCreate = monRequests;
+    req.itemsToCreateSize = count;
+
+    UA_CreateMonitoredItemsResponse resp =
+        UA_Client_MonitoredItems_createDataChanges(client, req, contexts_arr, callbacks, NULL);
+
+    for (size_t i = 0; i < resp.resultsSize; i++) {
+        if (resp.results[i].statusCode == UA_STATUSCODE_GOOD) {
+            log_trace("MonitoredItem created, subId=%u", subId);
+            MonitoredItem monItem = {
+                .nodeIdx = (uint32_t)i, .subId = subId, .monId = resp.results[i].monitoredItemId};
+            ARENA_PUSH(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
+        } else {
+            log_warn(
+                "Failed to create monitored item: %s",
+                UA_StatusCode_name(resp.results[i].statusCode));
+        }
+    }
+
+    UA_CreateMonitoredItemsResponse_clear(&resp);
+    free(monRequests);
+    free(callbacks);
+    free(contexts_arr);
+    return 1;
+}
+static int mirua_subscription_create3(
+    UA_Client* client, da_UA_NodeId* nodes, uint32_t* currentSubId) {
+    uadb_context* ctx = (uadb_context*)UA_Client_getContext(client);
+
+    UA_CreateSubscriptionRequest subRequest = UA_CreateSubscriptionRequest_default();
+    UA_CreateSubscriptionResponse subResponse =
+        UA_Client_Subscriptions_create(client, subRequest, NULL, NULL, NULL);
+    if (subResponse.responseHeader.serviceResult != UA_STATUSCODE_GOOD) {
+        log_error(
+            "Failed to create subscription: %s",
+            UA_StatusCode_name(subResponse.responseHeader.serviceResult));
+        return 0;
+    }
+    UA_UInt32 subId = subResponse.subscriptionId;
+    *currentSubId = subId;
+
+    // Build all requests at once
+    UA_MonitoredItemCreateRequest* monRequests = arena_alloc(
+        ctx->temporaryArena,
+        nodes->count * sizeof(UA_MonitoredItemCreateRequest),
+        alignof(UA_MonitoredItemCreateRequest));
+    UA_Client_DataChangeNotificationCallback* callbacks = arena_alloc(
+        ctx->temporaryArena,
+        nodes->count * sizeof(UA_Client_DataChangeNotificationCallback),
+        alignof(void*));
+    void** contexts_arr =
+        arena_alloc(ctx->temporaryArena, nodes->count * sizeof(void*), alignof(void*));
+
+    for (size_t i = 0; i < nodes->count; i++) {
+        monRequests[i] = UA_MonitoredItemCreateRequest_default(nodes->items[i]);
+        callbacks[i] = handler_TheAnswerChanged;
+        contexts_arr[i] = NULL;
+    }
+
+    UA_CreateMonitoredItemsRequest req;
+    UA_CreateMonitoredItemsRequest_init(&req);
+    req.subscriptionId = subId;
+    req.timestampsToReturn = UA_TIMESTAMPSTORETURN_BOTH;
+    req.itemsToCreate = monRequests;
+    req.itemsToCreateSize = nodes->count;
+
+    UA_CreateMonitoredItemsResponse resp =
+        UA_Client_MonitoredItems_createDataChanges(client, req, contexts_arr, callbacks, NULL);
+
+    for (size_t i = 0; i < resp.resultsSize; i++) {
+        if (resp.results[i].statusCode == UA_STATUSCODE_GOOD) {
+            log_trace("MonitoredItem created, subId=%u", subId);
+            MonitoredItem monItem = {
+                .nodeIdx = (uint32_t)i, .subId = subId, .monId = resp.results[i].monitoredItemId};
+            ARENA_PUSH(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
+        } else {
+            log_warn(
+                "Failed to create monitored item: %s",
+                UA_StatusCode_name(resp.results[i].statusCode));
+        }
+    }
+
+    UA_CreateMonitoredItemsResponse_clear(&resp);
     return 1;
 }
 static void monCallback(
@@ -279,6 +401,7 @@ static void stateCallback(
 }
 typedef struct uadb_config {
     const char* configPath;
+    const char* dbName;
     const char* uaEndpoint;
     bool autoReconnect;
     memory_arena* temporaryArena;
@@ -292,9 +415,23 @@ static int uabd_recorder(uadb_config config) {
     // ===================================== INIT =====================================
     uadb_context ctx;
     memset(&ctx, 0, sizeof(ctx));
+
+    // ctx.executableDir =
+    //     (String_Builder*)arena_alloc(ctx.persistentArena, PATH_MAX, alignof(String_Builder));
+    // PATH_MAX - 1 to fit null byte
+    // int retVal = fs_get_executable_dir(ctx.executableDir, PATH_MAX - 1);
+    // if (retVal == -1) {
+    //     log_error("getting executable dir failed. Memory issue. Shouldn't happen ever");
+    // }
+    ctx.configDir = "/data/";
+    ctx.dbDir = "/data/";
+
+    String_Builder sb;
+    // sb_append
+
     ctx.temporaryArena = config.temporaryArena;
     ctx.persistentArena = config.persistentArena;
-    ctx.dbName = arena_strdup(ctx.temporaryArena, "default.db", alignof(char));
+    ctx.dbName = arena_strdup(ctx.temporaryArena, config.dbName, alignof(char));
     ctx.dbSchemaFilename = arena_strdup(ctx.temporaryArena, "schema.txt", alignof(char));
     db_context_init(&ctx.db);
 
@@ -505,12 +642,17 @@ static int uabd_recorder(uadb_config config) {
 }
 
 int main(int argc, char* argv[]) {
+    (void)argc;
+    (void)argv;
+
     memory_arena* persistentArena = arena_create(KB(1));
     memory_arena* tempArena = arena_create(MB(1));
 
     uadb_config config = {
         .configPath = "./output.txt",
         .uaEndpoint = "opc.tcp://localhost:4840",
+        .dbName = "firstDb.db",
+
         .autoReconnect = true,
         .persistentArena = persistentArena,
         .temporaryArena = tempArena};

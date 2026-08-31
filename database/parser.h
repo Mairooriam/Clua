@@ -6,8 +6,8 @@
 #include <threads.h>
 
 #include "../core/allocator.h"
+#include "core/nob.h"
 #include "lexer.h"
-#include "nob.h"
 #include "string.h"
 
 typedef struct da_UA_NodeId {
