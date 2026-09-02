@@ -15,6 +15,7 @@
 #include "core/fileio.h"
 #include "core/log.h"
 #include "core/nob.h"
+#include "core/string.h"
 #include "include/db_access.h"
 #include "lexer.h"
 #include "open62541/client.h"
@@ -24,10 +25,13 @@
 #include "parser.h"
 
 typedef struct uadb_context {
-    String_Builder executableDir;
     // char* executableDir;
-    const char* dbDir;
-    const char* configDir;
+    String_Builder executableDir;
+    // const char* dbDir;
+    String_Builder schemaPath;
+    // const char* configDir;
+    String_Builder dbPath;
+    String_Builder opcuaConfigPath;
     UA_Client* client;
     da_UA_NodeId* nodes;
     bool connected;
@@ -40,8 +44,6 @@ typedef struct uadb_context {
     arr_MonitoredItem monitoredItems;
     uint32_t currentSubId;
     time_t configLastTouch;
-    char* dbName;
-    char* dbSchemaFilename;
     DbContext db;
 } uadb_context;
 
@@ -91,7 +93,8 @@ static void handler_TheAnswerChanged(
                     return;
                 }
             }
-            ARENA_PUSH(ctx->temporaryArena, &ctx->monitoredDeleteQue, MonitoredItem, monItem);
+            mir_da_arena_append(
+                ctx->temporaryArena, &ctx->monitoredDeleteQue, MonitoredItem, monItem);
 
             log_warn(
                 "Subscripted to not supported variable type, scheduled removal (sub=%u, mon=%u).",
@@ -127,17 +130,17 @@ static void handler_TheAnswerChanged(
             meas->name = (char*)arena_alloc(meas->arena, name_len + 1, alignof(char));
             memcpy(meas->name, str.data, name_len);
             meas->name[name_len] = '\0';
-            ARENA_PUSH(meas->arena, &meas->data.timestamp, int64_t, timestamp);
-            ARENA_PUSH(meas->arena, &meas->data.value, float, val);
-            ARENA_PUSH(ctx->temporaryArena, &ctx->measCache, Measurement, *meas);
+            mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
+            mir_da_arena_append(meas->arena, &meas->data.value, float, val);
+            mir_da_arena_append(ctx->temporaryArena, &ctx->measCache, Measurement, *meas);
         } else {
             bool found = false;
             for (size_t i = 0; i < ctx->measCache.count; i++) {
                 Measurement* meas = &ctx->measCache.items[i];
                 size_t meas_name_len = meas->name ? strlen(meas->name) : 0;
                 if (meas_name_len == name_len && memcmp(str.data, meas->name, name_len) == 0) {
-                    ARENA_PUSH(meas->arena, &meas->data.timestamp, int64_t, timestamp);
-                    ARENA_PUSH(meas->arena, &meas->data.value, float, val);
+                    mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
+                    mir_da_arena_append(meas->arena, &meas->data.value, float, val);
                     // log_info(
                     //     "MeasDataSize:%zu, capacity:%zu",
                     //     meas->data.timestamp.count,
@@ -153,9 +156,9 @@ static void handler_TheAnswerChanged(
                 meas->name = (char*)arena_alloc(meas->arena, name_len + 1, alignof(char));
                 memcpy(meas->name, str.data, name_len);
                 meas->name[name_len] = '\0';
-                ARENA_PUSH(meas->arena, &meas->data.timestamp, int64_t, timestamp);
-                ARENA_PUSH(meas->arena, &meas->data.value, float, val);
-                ARENA_PUSH(ctx->temporaryArena, &ctx->measCache, Measurement, *meas);
+                mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
+                mir_da_arena_append(meas->arena, &meas->data.value, float, val);
+                mir_da_arena_append(ctx->temporaryArena, &ctx->measCache, Measurement, *meas);
             }
         }
         UA_String_clear(&str);
@@ -201,7 +204,7 @@ static int mirua_subscription_create(
 
         MonitoredItem monItem = (MonitoredItem){
             .nodeIdx = (uint32_t)i, .subId = subId, .monId = monRet.monitoredItemId};
-        ARENA_PUSH(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
+        mir_da_arena_append(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
     }
     return 1;
 }
@@ -256,7 +259,7 @@ static int mirua_subscription_create2(
             log_trace("MonitoredItem created, subId=%u", subId);
             MonitoredItem monItem = {
                 .nodeIdx = (uint32_t)i, .subId = subId, .monId = resp.results[i].monitoredItemId};
-            ARENA_PUSH(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
+            mir_da_arena_append(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
         } else {
             log_warn(
                 "Failed to create monitored item: %s",
@@ -319,7 +322,7 @@ static int mirua_subscription_create3(
             log_trace("MonitoredItem created, subId=%u", subId);
             MonitoredItem monItem = {
                 .nodeIdx = (uint32_t)i, .subId = subId, .monId = resp.results[i].monitoredItemId};
-            ARENA_PUSH(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
+            mir_da_arena_append(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
         } else {
             log_warn(
                 "Failed to create monitored item: %s",
@@ -400,7 +403,7 @@ static void stateCallback(
     }
 }
 typedef struct uadb_config {
-    const char* configPath;
+    const char* opcuaConfigFilename;
     const char* dbName;
     const char* uaEndpoint;
     bool autoReconnect;
@@ -408,47 +411,73 @@ typedef struct uadb_config {
     memory_arena* persistentArena;
 } uadb_config;
 
+String_View uadb_get_dir_db() {}
+String_View uadb_get_dir_config() {}
+
 static int uabd_recorder(uadb_config config) {
     // TODO: clean arena at some point. add persistent arena and temp arena that gets cleared
     // more often
 
+    const char* dataDir = "/../data";
     // ===================================== INIT =====================================
     uadb_context ctx;
     memset(&ctx, 0, sizeof(ctx));
 
-    // ctx.executableDir =
-    //     (String_Builder*)arena_alloc(ctx.persistentArena, PATH_MAX, alignof(String_Builder));
-    // PATH_MAX - 1 to fit null byte
-    // int retVal = fs_get_executable_dir(ctx.executableDir, PATH_MAX - 1);
-    // if (retVal == -1) {
-    //     log_error("getting executable dir failed. Memory issue. Shouldn't happen ever");
-    // }
-    ctx.configDir = "/data/";
-    ctx.dbDir = "/data/";
-
-    String_Builder sb;
-    // sb_append
-
     ctx.temporaryArena = config.temporaryArena;
     ctx.persistentArena = config.persistentArena;
-    ctx.dbName = arena_strdup(ctx.temporaryArena, config.dbName, alignof(char));
-    ctx.dbSchemaFilename = arena_strdup(ctx.temporaryArena, "schema.txt", alignof(char));
-    db_context_init(&ctx.db);
+
+    int retVal = fs_sb_get_executable_dir(ctx.persistentArena, &ctx.executableDir);
+    if (retVal == -1) {
+        log_error("getting executable dir failed. Memory issue. Shouldn't happen ever");
+    }
+
+    sb_arena_append_buf(
+        ctx.persistentArena, &ctx.dbPath, ctx.executableDir.items, ctx.executableDir.count, char);
+    sb_arena_append_cstr(ctx.persistentArena, &ctx.dbPath, dataDir);
+    sb_arena_append_cstr(ctx.persistentArena, &ctx.dbPath, config.dbName);
+    sb_arena_append_null(ctx.persistentArena, &ctx.dbPath);
+
+    sb_arena_append_buf(
+        ctx.persistentArena,
+        &ctx.schemaPath,
+        ctx.executableDir.items,
+        ctx.executableDir.count,
+        char);
+    sb_arena_append_cstr(ctx.persistentArena, &ctx.schemaPath, dataDir);
+    sb_arena_append_cstr(ctx.persistentArena, &ctx.schemaPath, "/schema.txt");
+    sb_arena_append_null(ctx.persistentArena, &ctx.schemaPath);
+
+    // TODO: user might give path without /. validate input??
+    sb_arena_append_buf(
+        ctx.persistentArena,
+        &ctx.opcuaConfigPath,
+        ctx.executableDir.items,
+        ctx.executableDir.count,
+        char);
+    sb_arena_append_cstr(ctx.persistentArena, &ctx.opcuaConfigPath, dataDir);
+    sb_arena_append_cstr(ctx.persistentArena, &ctx.opcuaConfigPath, config.opcuaConfigFilename);
+    sb_arena_append_null(ctx.persistentArena, &ctx.opcuaConfigPath);
+
+    // db_context_init(&ctx.db);
 
     // ================================= SQLITE3 INIT =================================
-    char* schema = db_read_sql_schema(ctx.dbSchemaFilename, ctx.temporaryArena);
-    if (!db_connect(&ctx.db, ctx.dbName, schema)) {
+    // TODO: make them accept sb? or make it accept SV since it doesnt edit it.?
+
+    String_Builder schema;
+    int res = db_read_sql_schema(ctx.schemaPath.items, ctx.temporaryArena);
+
+    if (!db_connect(&ctx.db, ctx.dbPath.items, schema)) {
         log_warn("DB Connect failed. Returning from uadb.");
         return 0;
     }
 
     // ================================= CONFIG PARSE =================================
-    char* buf = fs_read_file(config.configPath, ctx.temporaryArena);
+    char* buf = fs_read_file(ctx.opcuaConfigPath.items, ctx.temporaryArena);
     if (!buf) {
         log_warn("[APP] - config read failed");
         return 0;
     }
-    ctx.configLastTouch = fs_file_get_last_touch(config.configPath);
+    ctx.configLastTouch = fs_file_get_last_touch(ctx.opcuaConfigPath.items);
     Scanner scanner;
     lx_init(&scanner, buf, ctx.temporaryArena);
     arr_Tokens* tokens = lx_tokenize(&scanner);
@@ -464,14 +493,14 @@ static int uabd_recorder(uadb_config config) {
         log_warn("Config didn't contain any nodes. Update config with correct one!");
         while (ctx.nodes->count == 0) {
             sleep(1);
-            if (fs_file_has_changed(config.configPath, ctx.configLastTouch)) {
+            if (fs_file_has_changed(ctx.opcuaConfigPath.items, ctx.configLastTouch)) {
                 log_info("Config file changed. Reloading config");
-                char* buf = fs_read_file(config.configPath, ctx.temporaryArena);
+                char* buf = fs_read_file(ctx.opcuaConfigPath.items, ctx.temporaryArena);
                 if (!buf) {
                     log_warn("[APP] - config read failed");
                     return 0;
                 }
-                ctx.configLastTouch = fs_file_get_last_touch(config.configPath);
+                ctx.configLastTouch = fs_file_get_last_touch(ctx.opcuaConfigPath.items);
                 Scanner scanner;
                 lx_init(&scanner, buf, ctx.temporaryArena);
                 arr_Tokens* tokens = lx_tokenize(&scanner);
@@ -481,7 +510,7 @@ static int uabd_recorder(uadb_config config) {
                 // pointer to the nodes so deleting them in temp arena would cause problems
                 ctx.nodes = parser_parse(&parser);
             } else {
-                log_info("Waiting for config:%s to be modified", config.configPath);
+                log_info("Waiting for config:%s to be modified", ctx.opcuaConfigPath.items);
             }
         }
     }
@@ -601,17 +630,17 @@ static int uabd_recorder(uadb_config config) {
         }
 
         // ================================ CONFIG RELOAD =================================
-        if (fs_file_has_changed(config.configPath, ctx.configLastTouch)) {
+        if (fs_file_has_changed(ctx.opcuaConfigPath.items, ctx.configLastTouch)) {
             log_info("Config file changed. Reloading config");
             arena_reset(ctx.temporaryArena, false);
             memset(&ctx.measCache, 0, sizeof(ctx.measCache));
 
-            char* buf = fs_read_file(config.configPath, ctx.temporaryArena);
+            char* buf = fs_read_file(ctx.opcuaConfigPath.items, ctx.temporaryArena);
             if (!buf) {
                 log_warn("[APP] - config read failed");
                 return 0;
             }
-            ctx.configLastTouch = fs_file_get_last_touch(config.configPath);
+            ctx.configLastTouch = fs_file_get_last_touch(ctx.opcuaConfigPath.items);
 
             Scanner scanner;
             lx_init(&scanner, buf, ctx.temporaryArena);
@@ -645,13 +674,13 @@ int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
 
-    memory_arena* persistentArena = arena_create(KB(1));
+    memory_arena* persistentArena = arena_create(KB(128));
     memory_arena* tempArena = arena_create(MB(1));
 
     uadb_config config = {
-        .configPath = "./output.txt",
+        .opcuaConfigFilename = "/output.txt",
         .uaEndpoint = "opc.tcp://localhost:4840",
-        .dbName = "firstDb.db",
+        .dbName = "/firstDb.db",
 
         .autoReconnect = true,
         .persistentArena = persistentArena,

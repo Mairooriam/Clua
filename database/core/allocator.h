@@ -19,7 +19,7 @@
             size_t new_cap = (da)->capacity ? (da)->capacity * 2 : ARENA_DEFAULT_CAP;     \
             ELEM_T* new_items =                                                           \
                 (ELEM_T*)arena_alloc((arena), sizeof(ELEM_T) * new_cap, alignof(ELEM_T)); \
-            \ if (!new_items) {                                                           \
+            if (!new_items) {                                                             \
                 fprintf(                                                                  \
                     stderr,                                                               \
                     "arena_alloc failed: requested %zu bytes\n",                          \
@@ -64,25 +64,48 @@
         memcpy((da)->items + (da)->count, (new_items), (new_items_count) * sizeof(*(da)->items)); \
         (da)->count += (new_items_count);                                                         \
     } while (0)
-// #define DA_ARENA_REALLOC(arena, da, ELEM_T)                                               \
-//     do {                                                                                  \
-//         if ((da)->count >= (da)->capacity) {                                              \
-//             size_t new_cap = (da)->capacity ? (da)->capacity * 2 : ARENA_DEFAULT_CAP;     \
-//             ELEM_T* new_items =                                                           \
-//                 (ELEM_T*)arena_alloc((arena), sizeof(ELEM_T) * new_cap, alignof(ELEM_T)); \
-//             if (!new_items) {                                                             \
-//                 fprintf(                                                                  \
-//                     stderr,                                                               \
-//                     "arena_alloc failed: requested %zu bytes\n",                          \
-//                     sizeof(ELEM_T) * new_cap);                                            \
-//                 abort();                                                                  \
-//             }                                                                             \
-//             if ((da)->items && (da)->count > 0)                                           \
-//                 memcpy(new_items, (da)->items, (da)->count * sizeof(ELEM_T));             \
-//             (da)->items = new_items;                                                      \
-//             (da)->capacity = new_cap;                                                     \
-//         }                                                                                 \
-//     } while (0)
+
+// Append a NULL-terminated string to a string builder with arena
+#define mir_sb_arena_append_cstr(arena, sb, cstr)        \
+    do {                                                 \
+        const char* s = (cstr);                          \
+        size_t n = strlen(s);                            \
+        mir_da_arena_append_many(arena, sb, s, n, char); \
+    } while (0)
+
+#define mir_sb_arena_append_null(arena, sb)                   \
+    do {                                                      \
+        mir_da_arena_append_many((arena), (sb), "", 1, char); \
+    } while (0)
+
+#define mir_sb_arena_append_buf(arena, da, new_items, new_items_count, ELEM_T) \
+    mir_da_arena_append_many(arena, da, new_items, new_items_count, ELEM_T)
+
+#define sb_arena_append_buf mir_sb_arena_append_buf
+#define sb_arena_append_cstr mir_sb_arena_append_cstr
+#define sb_arena_append_null mir_sb_arena_append_null
+
+/*
+#define DA_ARENA_REALLOC(arena, da, ELEM_T)                                               \
+    do {                                                                                  \
+        if ((da)->count >= (da)->capacity) {                                              \
+            size_t new_cap = (da)->capacity ? (da)->capacity * 2 : ARENA_DEFAULT_CAP;     \
+            ELEM_T* new_items =                                                           \
+                (ELEM_T*)arena_alloc((arena), sizeof(ELEM_T) * new_cap, alignof(ELEM_T)); \
+            if (!new_items) {                                                             \
+                fprintf(                                                                  \
+                    stderr,                                                               \
+                    "arena_alloc failed: requested %zu bytes\n",                          \
+                    sizeof(ELEM_T) * new_cap);                                            \
+                abort();                                                                  \
+            }                                                                             \
+            if ((da)->items && (da)->count > 0)                                           \
+                memcpy(new_items, (da)->items, (da)->count * sizeof(ELEM_T));             \
+            (da)->items = new_items;                                                      \
+            (da)->capacity = new_cap;                                                     \
+        }                                                                                 \
+    } while (0)
+    */
 
 /* Use inside a function to push `value` into `da` using `arena`. Returns false on alloc failure. */
 // #define nob_da_append(da, item)                \

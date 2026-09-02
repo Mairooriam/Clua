@@ -192,7 +192,7 @@ arr_Tokens* lx_tokenize(Scanner* scanner) {
 
     for (;;) {
         Token t = lx_scanToken(scanner);
-        ARENA_PUSH(scanner->arena, tokens, Token, t);
+        mir_da_arena_append(scanner->arena, tokens, Token, t);
         if (t.type == TOKEN_EOF) break;
     }
     return tokens;

@@ -17,8 +17,7 @@ int64_t now_ms(void);
 bool fs_file_has_changed(const char* filepath, time_t lastTouch);
 time_t fs_file_get_last_touch(const char* filepath);
 int fs_get_executable_dir(char* buf, size_t size);
-int fs_sb_get_executable_dir(String_Builder* sb);
-
+int fs_sb_get_executable_dir(memory_arena* arena, String_Builder* sb);
 char* fs_read_file(const char* filepath, memory_arena* arena) {
     char* buf = NULL;
     FILE* f = fopen(filepath, "r");
@@ -78,45 +77,37 @@ time_t fs_file_get_last_touch(const char* filepath) {
 
 int fs_get_executable_dir(char* buf, size_t bufsize) {
     char _buf[PATH_MAX];
-    ssize_t size = readlink("/proc/self/exe", _buf, PATH_MAX);
+    ssize_t size = readlink("/proc/self/exe", _buf, sizeof(_buf) - 1);
     if (size < 0) {
         return -1;
     }
-    size_t sizeWithNull = (size_t)size + 1;
-    if (buf == NULL | bufsize == 0) {
-        return (int)sizeWithNull;
-    }
-
-    if (bufsize < sizeWithNull) {
-        return -1;
-    }
-
-    _buf[size + 1] = '\0';
-    memcpy(buf, _buf, sizeWithNull);
-    return (int)sizeWithNull;
-}
-int fs_sb_get_executable_dir(String_Builder* sb) {
-    if (sb == NULL) {
-        return -1;
-    }
-
-    char _buf[PATH_MAX];
-    ssize_t size = readlink("/proc/self/exe", _buf, PATH_MAX - 1);
-    if (size < 0) {
-        return -1;
-    }
-
     _buf[size] = '\0';
 
     char* slash = strrchr(_buf, '/');
-    size_t dirLen = 0;
-    if (slash != NULL) {
-        dirLen = (slash == _buf) ? 1 : (size_t)(slash - _buf);
+    if (slash) {
+        *slash = '\0';
     }
 
-    if (dirLen > 0) {
-        sb_append_buf(sb, _buf, dirLen);
+    size_t dir_len = strlen(_buf);
+    if (buf == NULL || bufsize == 0) {
+        return (int)(dir_len + 1);
     }
 
-    return (int)dirLen;
+    if (bufsize < dir_len + 1) {
+        return -1;
+    }
+
+    memcpy(buf, _buf, dir_len + 1);
+    return (int)(dir_len + 1);
+}
+int fs_sb_get_executable_dir(memory_arena* arena, String_Builder* sb) {
+    int required = fs_get_executable_dir(NULL, 0);
+    mir_da_arena_reserve(arena, sb, required, char);
+    int count = fs_get_executable_dir(sb->items, sb->capacity);
+    int countWithOutNull = count - 1;
+    if (count > 0) {
+        // -1 for removing the null termination since SB is range based
+        sb->count = (size_t)count - 1;
+    }
+    return countWithOutNull;
 }

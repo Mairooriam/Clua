@@ -27,5 +27,6 @@ Relies on open62541 for opc ua client.
 
 ### TODO
 
-- Get functionality up and running with replxx
-- If connection fails promt user to use open65421 server ( runs a server on another thread and connects to it or single threeaded)
+- [] go trough cmake to get rid of global compile commands. they pollute subdirectories.
+ 
+

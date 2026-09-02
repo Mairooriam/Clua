@@ -24,9 +24,10 @@ function(enable_strict target)
       -Wnull-dereference
       -Wdouble-promotion
       -Wcast-align
-      $<$<COMPILE_LANGUAGE:CXX>:-Wold-style-cast>
-      $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>
-      $<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>
+      -Wno-c++-compat
+    #   $<$<COMPILE_LANGUAGE:CXX>:-Wold-style-cast>
+    #   $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>
+    #   $<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>
     )
   endif()
 endfunction()
@@ -85,7 +86,7 @@ add_custom_target(sync_compile_commands ALL
 add_custom_target(copy_schema ALL
   COMMAND ${CMAKE_COMMAND} -E copy
           ${CMAKE_SOURCE_DIR}/schema.txt
-          ${CMAKE_BINARY_DIR}/schema.txt
+          ${CMAKE_BINARY_DIR}/data/schema.txt
   COMMENT "Copy schema.txt to bin dir"
   VERBATIM
 )

@@ -168,7 +168,9 @@ da_UA_NodeId* parser_parse(Parser* p) {
 
         if (status == UA_STATUSCODE_GOOD) {
             if (nodes->count >= nodes->capacity) {
-                DA_ARENA_REALLOC(p->arena, nodes, UA_NodeId);
+                // TODO: this needs refactoring probably since the old DA_ARENA_REALLOC is probalby
+                // not needed anymore since push makes sure it reserves enough space?
+                mir_da_arena_realloc(p->arena, nodes, UA_NodeId);
             }
             UA_NodeId_copy_arena(p->arena, &id, &nodes->items[nodes->count++]);
             UA_NodeId_clear(&id);
