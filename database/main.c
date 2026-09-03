@@ -462,19 +462,24 @@ static int uabd_recorder(uadb_config config) {
 
     // ================================= SQLITE3 INIT =================================
     // TODO: make them accept sb? or make it accept SV since it doesnt edit it.?
-
-    String_Builder schema;
-    int res = db_read_sql_schema(ctx.schemaPath.items, ctx.temporaryArena);
+    char* schema = db_read_sql_schema(ctx.schemaPath.items, ctx.temporaryArena);
+    if (schema == NULL) {
+        log_fatal(
+            "[UADB] - Reading schema at %.*s failed. Returning from uadb.",
+            (int)ctx.schemaPath.count,
+            ctx.schemaPath.items);
+        return 0;
+    }
 
     if (!db_connect(&ctx.db, ctx.dbPath.items, schema)) {
-        log_warn("DB Connect failed. Returning from uadb.");
+        log_warn("[UADB] - DB Connect failed. Returning from uadb.");
         return 0;
     }
 
     // ================================= CONFIG PARSE =================================
     char* buf = fs_read_file(ctx.opcuaConfigPath.items, ctx.temporaryArena);
     if (!buf) {
-        log_warn("[APP] - config read failed");
+        log_error("[UADB] - config read failed. Returning from uadb.");
         return 0;
     }
     ctx.configLastTouch = fs_file_get_last_touch(ctx.opcuaConfigPath.items);
@@ -545,6 +550,7 @@ static int uabd_recorder(uadb_config config) {
         UA_StatusCode st = UA_Client_run_iterate(ctx.client, 100);
 
         // ============================= CHECKING CONNECTION ==============================
+        // TODO: instead of checking it use callback.
         UA_SecureChannelState ch;
         UA_SessionState se;
         UA_StatusCode cs;
@@ -556,6 +562,7 @@ static int uabd_recorder(uadb_config config) {
             UA_Client_connect(ctx.client, config.uaEndpoint);
         }
 
+        // ============================= WRITING TO DATABASE ==============================
         if (st == UA_STATUSCODE_GOOD && ctx.wasDisconnected) {
             // TODO: Delete old subscriptions
             mirua_subscription_create(ctx.client, ctx.nodes, &ctx.currentSubId);

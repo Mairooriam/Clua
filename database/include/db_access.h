@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include "../core/allocator.h"
+#include "../core/nob.h"
 
 #define DB_ARENA_SIZE KB(4)
 typedef struct sqlite3 sqlite3;
@@ -87,4 +88,4 @@ void db_write(DbContext* ctx, sqlite3_int64 timestamp_ms, const char* name, doub
 arr_db_schema_variables* db_query_available_variables(sqlite3* db, memory_arena* arena);
 
 char* db_read_sql_schema(const char* schemaFilename, memory_arena* arena);
-bool db_exists_in_database(sqlite3* db, const char* variable_name);
+bool db_exists_in_databese(sqlite3* db, const char* variable_name);

@@ -217,8 +217,26 @@ void db_write_end(DbContext* ctx) {
 }
 
 char* db_read_sql_schema(const char* schemaFilename, memory_arena* arena) {
+    struct stat st;
+
+    if (stat(schemaFilename, &st) != 0) {
+        int saved = errno;
+        char errMsg[256];
+        strerror_r(saved, errMsg, sizeof errMsg);
+        log_error("stat('%s') failed: %s", schemaFilename, errMsg);
+        return NULL;
+    }
+
+    if (S_ISDIR(st.st_mode)) {
+        log_error("schema path is a directory: %s", schemaFilename);
+        return NULL;
+    }
+
     FILE* fp = fopen(schemaFilename, "r");
-    if (!fp) return NULL;
+    if (!fp) {
+        log_error("Reading file: %s");
+        return NULL;
+    }
 
     fseek(fp, 0, SEEK_END);
     long file_size = ftell(fp);
@@ -226,12 +244,15 @@ char* db_read_sql_schema(const char* schemaFilename, memory_arena* arena) {
 
     if (file_size <= 0) {
         fclose(fp);
+        log_warn("File at: %s is empty.");
         return NULL;
+    } else if (file_size == -1L) {
     }
 
     char* buf = (char*)arena_alloc(arena, (size_t)file_size + 1, alignof(char));
     if (!buf) {
         fclose(fp);
+        log_fatal("Allocating buffer failed.");
         return NULL;
     }
 

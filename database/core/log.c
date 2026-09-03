@@ -22,9 +22,9 @@
 
 #include "log.h"
 
+#include <assert.h>
 #include <execinfo.h>
 #include <stdlib.h>
-#include <assert.h>
 
 #define MAX_CALLBACKS 32
 #define LOG_BACKTRACE_MAX_FRAMES 64
@@ -44,11 +44,10 @@ static struct {
     bool backtrace_enabled;
     int backtrace_depth;
 } L = {
-    .backtrace_enabled = true,
+    .backtrace_enabled = false,
     .backtrace_depth = LOG_BACKTRACE_DEFAULT_DEPTH,
 };
 static void print_backtrace(FILE* out);
-
 
 static const char* level_strings[] = {
     "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL", "ALLOC", "DE_ALLOC"};
@@ -144,27 +143,27 @@ int log_add_fp(FILE* fp, int level) {
     return log_add_callback(file_callback, fp, level);
 }
 static void print_backtrace(FILE* out) {
-int depth = L.backtrace_depth;
-if (depth < 1) depth = LOG_BACKTRACE_DEFAULT_DEPTH;
-if (depth > LOG_BACKTRACE_MAX_FRAMES) depth = LOG_BACKTRACE_MAX_FRAMES;
+    int depth = L.backtrace_depth;
+    if (depth < 1) depth = LOG_BACKTRACE_DEFAULT_DEPTH;
+    if (depth > LOG_BACKTRACE_MAX_FRAMES) depth = LOG_BACKTRACE_MAX_FRAMES;
 
-void* frames[LOG_BACKTRACE_MAX_FRAMES];
-int frame_count = backtrace(frames, depth);
-if (frame_count <= 0) {
-return;
-}
+    void* frames[LOG_BACKTRACE_MAX_FRAMES];
+    int frame_count = backtrace(frames, depth);
+    if (frame_count <= 0) {
+        return;
+    }
 
-char** symbols = backtrace_symbols(frames, frame_count);
-if (!symbols) {
-return;
-}
+    char** symbols = backtrace_symbols(frames, frame_count);
+    if (!symbols) {
+        return;
+    }
 
-fprintf(out, " backtrace (%d frames):\n", frame_count);
-for (int i = 0; i < frame_count; ++i) {
-fprintf(out, " [%d] %s\n", i, symbols[i]);
-}
-fflush(out);
-free(symbols);
+    fprintf(out, " backtrace (%d frames):\n", frame_count);
+    for (int i = 0; i < frame_count; ++i) {
+        fprintf(out, " [%d] %s\n", i, symbols[i]);
+    }
+    fflush(out);
+    free(symbols);
 }
 static void init_event(log_Event* ev, void* udata) {
     if (!ev->time) {
