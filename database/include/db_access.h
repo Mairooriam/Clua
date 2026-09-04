@@ -56,6 +56,7 @@ typedef struct DbContext {
 void db_context_init(DbContext* ctx);
 
 typedef struct MonitoredItem {
+    String_Builder name;
     uint32_t nodeIdx;
     uint32_t subId;
     uint32_t monId;

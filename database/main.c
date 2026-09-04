@@ -3,6 +3,7 @@
 #include <linux/limits.h>
 #include <open62541/plugin/log_stdout.h>
 #include <stdalign.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -112,33 +113,45 @@ static void handler_TheAnswerChanged(
         //     value->value.type->typeName,
         //     ctx->measCache.count);
 
-        UA_String str = {0};
-        uint32_t idx = 0;
+        // UA_String str = {0};
+        // uint32_t idx = 0;
+        MonitoredItem item = {0};
+        bool foundMonItem = false;
         for (size_t i = 0; i < ctx->monitoredItems.count; i++) {
-            MonitoredItem item = ctx->monitoredItems.items[i];
-            if (item.monId == monId && item.subId == subId) {
-                idx = item.nodeIdx;
+            MonitoredItem cur = ctx->monitoredItems.items[i];
+            // item = ctx->monitoredItems.items[i];
+            if (cur.monId == monId && cur.subId == subId) {
+                // idx = item.nodeIdx;
+                item = ctx->monitoredItems.items[i];
+                foundMonItem = true;
             }
         }
-        UA_NodeId_print(&ctx->nodes->items[idx], &str);
+        // UA_NodeId_print(&ctx->nodes->items[idx], &str);
 
-        size_t name_len = (size_t)str.length;
-        int initialMeasSize = 128;
+        // size_t name_len = (size_t)str.length;
+
+        size_t initialMeasSize = 128;
+        if (foundMonItem == false) {
+            log_error("this probably shoudln't happen. check whats going on here lol....");
+            return;
+        }
+
         if (ctx->measCache.count == 0) {
+            // Measurement* meas = measurement_create_in_arena(
+            //     ctx->temporaryArena, (char*)str.data, name_len, initialMeasSize);
             Measurement* meas = measurement_create_in_arena(
-                ctx->temporaryArena, (char*)str.data, name_len, initialMeasSize);
-            meas->name = (char*)arena_alloc(meas->arena, name_len + 1, alignof(char));
-            memcpy(meas->name, str.data, name_len);
-            meas->name[name_len] = '\0';
+                ctx->temporaryArena, item.name.items, item.name.count, initialMeasSize);
             mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
             mir_da_arena_append(meas->arena, &meas->data.value, float, val);
             mir_da_arena_append(ctx->temporaryArena, &ctx->measCache, Measurement, *meas);
         } else {
             bool found = false;
+            // TODO: if this bottlenecks convert code to hashmap.
             for (size_t i = 0; i < ctx->measCache.count; i++) {
                 Measurement* meas = &ctx->measCache.items[i];
                 size_t meas_name_len = meas->name ? strlen(meas->name) : 0;
-                if (meas_name_len == name_len && memcmp(str.data, meas->name, name_len) == 0) {
+                if (meas_name_len == item.name.count &&
+                    memcmp(item.name.items, meas->name, item.name.count) == 0) {
                     mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
                     mir_da_arena_append(meas->arena, &meas->data.value, float, val);
                     // log_info(
@@ -151,17 +164,23 @@ static void handler_TheAnswerChanged(
             }
             if (!found) {
                 log_info("Variable not found in cache creating one");
+                // Measurement* meas = measurement_create_in_arena(
+                //     ctx->temporaryArena, (char*)str.data, name_len, initialMeasSize);
+                // meas->name = (char*)arena_alloc(meas->arena, name_len + 1, alignof(char));
+                // memcpy(meas->name, str.data, name_len);
+                // meas->name[name_len] = '\0';
+                // mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
+                // mir_da_arena_append(meas->arena, &meas->data.value, float, val);
+                // mir_da_arena_append(ctx->temporaryArena, &ctx->measCache, Measurement, *meas);
+
                 Measurement* meas = measurement_create_in_arena(
-                    ctx->temporaryArena, (char*)str.data, name_len, initialMeasSize);
-                meas->name = (char*)arena_alloc(meas->arena, name_len + 1, alignof(char));
-                memcpy(meas->name, str.data, name_len);
-                meas->name[name_len] = '\0';
+                    ctx->temporaryArena, item.name.items, item.name.count, initialMeasSize);
                 mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
                 mir_da_arena_append(meas->arena, &meas->data.value, float, val);
                 mir_da_arena_append(ctx->temporaryArena, &ctx->measCache, Measurement, *meas);
             }
         }
-        UA_String_clear(&str);
+        // UA_String_clear(&str);
     }
 }
 static int mirua_subscription_create(
@@ -180,116 +199,8 @@ static int mirua_subscription_create(
     UA_UInt32 subId = subResponse.subscriptionId;
     *currentSubId = subId;
 
-    for (size_t i = 0; i < nodes->count; i++) {
-        // TODO: make some struct for monitoreditems to keep track of current subscriptions?
-        UA_NodeId* node = &nodes->items[i];
-
-        UA_MonitoredItemCreateRequest monRequest = UA_MonitoredItemCreateRequest_default(*node);
-
-        UA_MonitoredItemCreateResult monRet = UA_Client_MonitoredItems_createDataChange(
-            client,
-            subId,
-            UA_TIMESTAMPSTORETURN_BOTH,
-            monRequest,
-            NULL,
-            handler_TheAnswerChanged,
-            NULL);
-        if (monRet.statusCode == UA_STATUSCODE_GOOD) {
-            log_trace("MonitoredItem created, subId=%u", subId);
-        } else {
-            // TODO: add nodeid that was invalkid into logging.
-            log_warn("Failed to create monitored item: %s", UA_StatusCode_name(monRet.statusCode));
-            continue;
-        }
-
-        MonitoredItem monItem = (MonitoredItem){
-            .nodeIdx = (uint32_t)i, .subId = subId, .monId = monRet.monitoredItemId};
-        mir_da_arena_append(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
-    }
-    return 1;
-}
-static int mirua_subscription_create2(
-    UA_Client* client, da_UA_NodeId* nodes, uint32_t* currentSubId) {
-    uadb_context* ctx = (uadb_context*)UA_Client_getContext(client);
-
-    UA_CreateSubscriptionRequest subRequest = UA_CreateSubscriptionRequest_default();
-    UA_CreateSubscriptionResponse subResponse =
-        UA_Client_Subscriptions_create(client, subRequest, NULL, NULL, NULL);
-    if (subResponse.responseHeader.serviceResult != UA_STATUSCODE_GOOD) {
-        log_error(
-            "Failed to create subscription: %s",
-            UA_StatusCode_name(subResponse.responseHeader.serviceResult));
-        return 0;
-    }
-    UA_UInt32 subId = subResponse.subscriptionId;
-    *currentSubId = subId;
-
-    size_t count = nodes->count;
-    UA_MonitoredItemCreateRequest* monRequests =
-        malloc(count * sizeof(UA_MonitoredItemCreateRequest));
-    UA_Client_DataChangeNotificationCallback* callbacks =
-        malloc(count * sizeof(UA_Client_DataChangeNotificationCallback));
-    void** contexts_arr = malloc(count * sizeof(void*));
-
-    if (!monRequests || !callbacks || !contexts_arr) {
-        free(monRequests);
-        free(callbacks);
-        free(contexts_arr);
-        return 0;
-    }
-
-    for (size_t i = 0; i < count; i++) {
-        monRequests[i] = UA_MonitoredItemCreateRequest_default(nodes->items[i]);
-        callbacks[i] = handler_TheAnswerChanged;
-        contexts_arr[i] = NULL;
-    }
-
-    UA_CreateMonitoredItemsRequest req;
-    UA_CreateMonitoredItemsRequest_init(&req);
-    req.subscriptionId = subId;
-    req.timestampsToReturn = UA_TIMESTAMPSTORETURN_BOTH;
-    req.itemsToCreate = monRequests;
-    req.itemsToCreateSize = count;
-
-    UA_CreateMonitoredItemsResponse resp =
-        UA_Client_MonitoredItems_createDataChanges(client, req, contexts_arr, callbacks, NULL);
-
-    for (size_t i = 0; i < resp.resultsSize; i++) {
-        if (resp.results[i].statusCode == UA_STATUSCODE_GOOD) {
-            log_trace("MonitoredItem created, subId=%u", subId);
-            MonitoredItem monItem = {
-                .nodeIdx = (uint32_t)i, .subId = subId, .monId = resp.results[i].monitoredItemId};
-            mir_da_arena_append(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
-        } else {
-            log_warn(
-                "Failed to create monitored item: %s",
-                UA_StatusCode_name(resp.results[i].statusCode));
-        }
-    }
-
-    UA_CreateMonitoredItemsResponse_clear(&resp);
-    free(monRequests);
-    free(callbacks);
-    free(contexts_arr);
-    return 1;
-}
-static int mirua_subscription_create3(
-    UA_Client* client, da_UA_NodeId* nodes, uint32_t* currentSubId) {
-    uadb_context* ctx = (uadb_context*)UA_Client_getContext(client);
-
-    UA_CreateSubscriptionRequest subRequest = UA_CreateSubscriptionRequest_default();
-    UA_CreateSubscriptionResponse subResponse =
-        UA_Client_Subscriptions_create(client, subRequest, NULL, NULL, NULL);
-    if (subResponse.responseHeader.serviceResult != UA_STATUSCODE_GOOD) {
-        log_error(
-            "Failed to create subscription: %s",
-            UA_StatusCode_name(subResponse.responseHeader.serviceResult));
-        return 0;
-    }
-    UA_UInt32 subId = subResponse.subscriptionId;
-    *currentSubId = subId;
-
     // Build all requests at once
+    arena_set_reset_point_current(ctx->temporaryArena);
     UA_MonitoredItemCreateRequest* monRequests = arena_alloc(
         ctx->temporaryArena,
         nodes->count * sizeof(UA_MonitoredItemCreateRequest),
@@ -316,12 +227,19 @@ static int mirua_subscription_create3(
 
     UA_CreateMonitoredItemsResponse resp =
         UA_Client_MonitoredItems_createDataChanges(client, req, contexts_arr, callbacks, NULL);
+    arena_reset(ctx->temporaryArena, false);
 
     for (size_t i = 0; i < resp.resultsSize; i++) {
         if (resp.results[i].statusCode == UA_STATUSCODE_GOOD) {
             log_trace("MonitoredItem created, subId=%u", subId);
             MonitoredItem monItem = {
                 .nodeIdx = (uint32_t)i, .subId = subId, .monId = resp.results[i].monitoredItemId};
+            sb_arena_append_buf(
+                ctx->temporaryArena,
+                &monItem.name,
+                ctx->nodes->items[i].identifier.string.data,
+                ctx->nodes->items[i].identifier.string.length,
+                char);
             mir_da_arena_append(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
         } else {
             log_warn(
@@ -540,13 +458,13 @@ static int uabd_recorder(uadb_config config) {
     int64_t last_push = now_ms();
     const int64_t push_interval_ms = 5000;
     while (g_running) {
-        log_info(
-            "Memory - Persistent:count%zu,size%zu - temporary:count%zu,size%zu",
-            ctx.persistentArena->offset,
-            ctx.persistentArena->size,
-            ctx.temporaryArena->offset,
-            ctx.temporaryArena->size);
-
+        // log_info(
+        //     "Memory - Persistent:count%zu,size%zu - temporary:count%zu,size%zu",
+        //     ctx.persistentArena->offset,
+        //     ctx.persistentArena->size,
+        //     ctx.temporaryArena->offset,
+        //     ctx.temporaryArena->size);
+        //
         UA_StatusCode st = UA_Client_run_iterate(ctx.client, 100);
 
         // ============================= CHECKING CONNECTION ==============================
@@ -562,17 +480,25 @@ static int uabd_recorder(uadb_config config) {
             UA_Client_connect(ctx.client, config.uaEndpoint);
         }
 
-        // ============================= WRITING TO DATABASE ==============================
+        // ============================= CREATE SUBSCRIPTIONS ==============================
         if (st == UA_STATUSCODE_GOOD && ctx.wasDisconnected) {
             // TODO: Delete old subscriptions
             mirua_subscription_create(ctx.client, ctx.nodes, &ctx.currentSubId);
-            arena_reset(ctx.temporaryArena, false);
+            // TODO: fiqure out the reason i had arnea reset here :)
+            //  arena_reset(ctx.temporaryArena, false);
             ctx.wasDisconnected = false;
         }
 
         // ============================= WRITING TO DATABASE ==============================
         int64_t cur = now_ms();
         if (cur - last_push >= push_interval_ms) {
+            log_info(
+                "Memory - Persistent:count%zu,size%zu - temporary:count%zu,size%zu",
+                ctx.persistentArena->offset,
+                ctx.persistentArena->size,
+                ctx.temporaryArena->offset,
+                ctx.temporaryArena->size);
+
             last_push = cur;
             if (ctx.measCache.count == 0) {
                 continue;
@@ -641,6 +567,8 @@ static int uabd_recorder(uadb_config config) {
             log_info("Config file changed. Reloading config");
             arena_reset(ctx.temporaryArena, false);
             memset(&ctx.measCache, 0, sizeof(ctx.measCache));
+            memset(&ctx.monitoredItems, 0, sizeof(ctx.monitoredItems));
+            memset(&ctx.monitoredDeleteQue, 0, sizeof(ctx.monitoredDeleteQue));
 
             char* buf = fs_read_file(ctx.opcuaConfigPath.items, ctx.temporaryArena);
             if (!buf) {

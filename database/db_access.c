@@ -302,9 +302,9 @@ Measurement* measurement_create_in_arena(
     memory_arena* arena, char* strData, size_t strLenght, size_t count) {
     Measurement* meas = (Measurement*)arena_alloc(arena, sizeof(Measurement), alignof(Measurement));
     meas->arena = arena;
-    // meas->name = arena_strdup(arena, name, alignof(char));
-    meas->name = (char*)arena_alloc(arena, strLenght, alignof(char));
+    meas->name = (char*)arena_alloc(arena, strLenght + 1, alignof(char));
     memcpy(meas->name, strData, strLenght);
+    meas->name[strLenght] = '\0';
     meas->data.timestamp = *arr_i64_create_in_arena(arena, count);
     meas->data.value = *arr_f32_create_in_arena(arena, count);
     return meas;

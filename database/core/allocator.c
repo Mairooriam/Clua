@@ -48,6 +48,7 @@ void* arena_alloc(memory_arena* arena, size_t size, size_t alignment) {
     size_t aligned_offset = align(arena->offset, alignment);
 
     // overflow-safe bounds check
+    // TODO: add name for memory_arena struct so logging will say which arena ran out of memory.
     if (aligned_offset > arena->size || size > arena->size - aligned_offset) {
         log_fatal("Arena ran out of memory! no dynamic arena yet!");
         abort();
