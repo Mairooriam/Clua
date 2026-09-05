@@ -60,6 +60,22 @@ static void handler_TheAnswerChanged(
 
     float val = -999999.0f;
     int64_t timestamp = -1;
+
+    MonitoredItem item = {0};
+    bool foundMonItem = false;
+    for (size_t i = 0; i < ctx->monitoredItems.count; i++) {
+        MonitoredItem cur = ctx->monitoredItems.items[i];
+        if (cur.monId == monId && cur.subId == subId) {
+            item = ctx->monitoredItems.items[i];
+            foundMonItem = true;
+        }
+    }
+    size_t initialMeasSize = 128;
+    if (foundMonItem == false) {
+        log_error("this probably shoudln't happen. check whats going on here lol....");
+        return;
+    }
+
     if (value->hasValue && value->serverTimestamp && UA_Variant_isScalar(&value->value)) {
         // TODO: test the different types. downcasting
         const UA_DataType* type = value->value.type;
@@ -87,7 +103,8 @@ static void handler_TheAnswerChanged(
             // TODO: is this correct?
             val = *(float*)value->value.data;
         } else {
-            MonitoredItem monItem = {.subId = subId, .monId = monId};
+            // TODO: Why am i doing this? why not use item straight away?
+            MonitoredItem monItem = {.subId = subId, .monId = monId, .name = item.name};
             for (size_t i = 0; i < ctx->monitoredDeleteQue.count; i++) {
                 monItem = ctx->monitoredDeleteQue.items[i];
 
@@ -105,21 +122,6 @@ static void handler_TheAnswerChanged(
             return;
         }
         timestamp = value->serverTimestamp;
-
-        MonitoredItem item = {0};
-        bool foundMonItem = false;
-        for (size_t i = 0; i < ctx->monitoredItems.count; i++) {
-            MonitoredItem cur = ctx->monitoredItems.items[i];
-            if (cur.monId == monId && cur.subId == subId) {
-                item = ctx->monitoredItems.items[i];
-                foundMonItem = true;
-            }
-        }
-        size_t initialMeasSize = 128;
-        if (foundMonItem == false) {
-            log_error("this probably shoudln't happen. check whats going on here lol....");
-            return;
-        }
 
         if (ctx->measCache.count == 0) {
             Measurement* meas = measurement_create_in_arena(
@@ -502,12 +504,14 @@ static int uabd_recorder(uadb_config config) {
                 MonitoredItem monItem = nob_da_pop(&ctx.monitoredDeleteQue);
                 UA_Client_MonitoredItems_deleteSingle(ctx.client, monItem.subId, monItem.monId);
                 log_warn(
-                    "Deleted monitoredItem with subId:%i, monId:%i", monItem.subId, monItem.monId);
+                    "Deleted monitoredItem with subId:%i, monId:%i, name:\"%s\"",
+                    monItem.subId,
+                    monItem.monId,
+                    monItem.name.items);
                 // TODO: use hashmap :))
                 for (size_t i = 0; i < ctx.monitoredItems.count; i++) {
                     MonitoredItem* item = &ctx.monitoredItems.items[i];
                     if (item->monId == monItem.monId && item->subId == monItem.subId) {
-                        log_info("Removed deleted monitor from monitores");
                         nob_da_remove_unordered(&ctx.monitoredItems, i);
                         break;
                     }
