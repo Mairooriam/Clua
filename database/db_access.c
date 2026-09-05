@@ -219,6 +219,7 @@ void db_write_end(DbContext* ctx) {
 char* db_read_sql_schema(const char* schemaFilename, memory_arena* arena) {
     struct stat st;
 
+    // TODO: make fs utility that chekcs file size safely first checking if its a dir. etc.
     if (stat(schemaFilename, &st) != 0) {
         int saved = errno;
         char errMsg[256];

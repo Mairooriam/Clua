@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define UNUSED(arg) (void)(arg)
+// #define UNUSED(arg) (void)(arg)
 #define KB(x) (x * 1024)
 #define MB(x) (x * 1024 * 1024)
 #define GB(x) (x * 1024 * 1024 * 1024)
@@ -84,35 +84,6 @@
 #define sb_arena_append_buf mir_sb_arena_append_buf
 #define sb_arena_append_cstr mir_sb_arena_append_cstr
 #define sb_arena_append_null mir_sb_arena_append_null
-
-/*
-#define DA_ARENA_REALLOC(arena, da, ELEM_T)                                               \
-    do {                                                                                  \
-        if ((da)->count >= (da)->capacity) {                                              \
-            size_t new_cap = (da)->capacity ? (da)->capacity * 2 : ARENA_DEFAULT_CAP;     \
-            ELEM_T* new_items =                                                           \
-                (ELEM_T*)arena_alloc((arena), sizeof(ELEM_T) * new_cap, alignof(ELEM_T)); \
-            if (!new_items) {                                                             \
-                fprintf(                                                                  \
-                    stderr,                                                               \
-                    "arena_alloc failed: requested %zu bytes\n",                          \
-                    sizeof(ELEM_T) * new_cap);                                            \
-                abort();                                                                  \
-            }                                                                             \
-            if ((da)->items && (da)->count > 0)                                           \
-                memcpy(new_items, (da)->items, (da)->count * sizeof(ELEM_T));             \
-            (da)->items = new_items;                                                      \
-            (da)->capacity = new_cap;                                                     \
-        }                                                                                 \
-    } while (0)
-    */
-
-/* Use inside a function to push `value` into `da` using `arena`. Returns false on alloc failure. */
-// #define nob_da_append(da, item)                \
-//     do {                                       \
-//         nob_da_reserve((da), (da)->count + 1); \
-//         (da)->items[(da)->count++] = (item);   \
-//     } while (0)
 
 #define mir_da_arena_append(arena, da, ELEM_T, value)                 \
     do {                                                              \

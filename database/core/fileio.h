@@ -102,7 +102,10 @@ int fs_get_executable_dir(char* buf, size_t bufsize) {
 }
 int fs_sb_get_executable_dir(memory_arena* arena, String_Builder* sb) {
     int required = fs_get_executable_dir(NULL, 0);
-    mir_da_arena_reserve(arena, sb, required, char);
+    if (required < 0) {
+        return -1;
+    }
+    mir_da_arena_reserve(arena, sb, (size_t)required, char);
     int count = fs_get_executable_dir(sb->items, sb->capacity);
     int countWithOutNull = count - 1;
     if (count > 0) {

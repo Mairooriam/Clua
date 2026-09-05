@@ -5,6 +5,7 @@
 #include "lexer.h"
 #include "open62541/types.h"
 
+da_UA_NodeId* _parser_parse(Parser* p);
 Token* parser_peek(Parser* p);
 Token* parser_advance(Parser* p);
 Token* parser_advance_until(Parser* p, TokenType type);
@@ -14,6 +15,42 @@ Token parser_current(Parser* p);
 bool parser_parse_header(Parser* p);
 bool parser_match_identifier(Parser* p, Sv wanted);
 bool parser_parse_string_field(Parser* p, Sv name, char** out);
+
+void UA_NodeId_copy_arena(memory_arena* arena, const UA_NodeId* src, UA_NodeId* dst) {
+    memset(dst, 0, sizeof(UA_NodeId));
+    dst->namespaceIndex = src->namespaceIndex;
+    dst->identifierType = src->identifierType;
+
+    switch (src->identifierType) {
+        case UA_NODEIDTYPE_NUMERIC: dst->identifier.numeric = src->identifier.numeric; break;
+        case UA_NODEIDTYPE_GUID: dst->identifier.guid = src->identifier.guid; break;
+        case UA_NODEIDTYPE_STRING: {
+            size_t len = src->identifier.string.length;
+            dst->identifier.string.length = len;
+            if (len) {
+                void* mem = arena_alloc(arena, len, alignof(UA_Byte));
+                memcpy(mem, src->identifier.string.data, len);
+                dst->identifier.string.data = (UA_Byte*)mem;
+            } else {
+                dst->identifier.string.data = NULL;
+            }
+            break;
+        }
+        case UA_NODEIDTYPE_BYTESTRING: {
+            size_t len = src->identifier.byteString.length;
+            dst->identifier.byteString.length = len;
+            if (len) {
+                void* mem = arena_alloc(arena, len, alignof(UA_Byte));
+                memcpy(mem, src->identifier.byteString.data, len);
+                dst->identifier.byteString.data = (UA_Byte*)mem;
+            } else {
+                dst->identifier.byteString.data = NULL;
+            }
+            break;
+        }
+        default: break;
+    }
+}
 
 void parser_init(Parser* parser, arr_Tokens* tokens, memory_arena* arena) {
     parser->tokens = tokens;
@@ -128,7 +165,7 @@ bool parser_parse_string_field(Parser* p, Sv name, char** out) {
     return true;
 }
 
-da_UA_NodeId* parser_parse(Parser* p) {
+da_UA_NodeId* _parser_parse(Parser* p) {
     da_UA_NodeId* nodes =
         (da_UA_NodeId*)arena_alloc(p->arena, sizeof(da_UA_NodeId), alignof(da_UA_NodeId));
     nodes->count = 0;
@@ -181,4 +218,15 @@ da_UA_NodeId* parser_parse(Parser* p) {
     }
 
     return nodes;
+}
+
+da_UA_NodeId* parser_parse(memory_arena* arena, char* config) {
+    Scanner scanner;
+    lx_init(&scanner, config, arena);
+    arr_Tokens* tokens = lx_tokenize(&scanner);
+    Parser parser;
+    parser_init(&parser, tokens, arena);
+    // TODO:  monitored items currently takes
+    // pointer to the nodes so deleting them in temp arena would cause problems
+    return _parser_parse(&parser);
 }

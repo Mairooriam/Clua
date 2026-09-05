@@ -39,8 +39,9 @@ typedef struct uadb_context {
     bool wasDisconnected;
     bool pushBuffer;
     arr_Measurements measCache;
-    memory_arena* temporaryArena;
     memory_arena* persistentArena;
+    memory_arena* temporaryArena;
+    memory_arena* configArena;
     arr_MonitoredItem monitoredDeleteQue;
     arr_MonitoredItem monitoredItems;
     uint32_t currentSubId;
@@ -105,31 +106,15 @@ static void handler_TheAnswerChanged(
         }
         timestamp = value->serverTimestamp;
 
-        // log_trace(
-        //     "callback from %u node:%.*s with value of type:%s, cacheSize:%zu",
-        //     subId,
-        //     (int)str.length,
-        //     str.data,
-        //     value->value.type->typeName,
-        //     ctx->measCache.count);
-
-        // UA_String str = {0};
-        // uint32_t idx = 0;
         MonitoredItem item = {0};
         bool foundMonItem = false;
         for (size_t i = 0; i < ctx->monitoredItems.count; i++) {
             MonitoredItem cur = ctx->monitoredItems.items[i];
-            // item = ctx->monitoredItems.items[i];
             if (cur.monId == monId && cur.subId == subId) {
-                // idx = item.nodeIdx;
                 item = ctx->monitoredItems.items[i];
                 foundMonItem = true;
             }
         }
-        // UA_NodeId_print(&ctx->nodes->items[idx], &str);
-
-        // size_t name_len = (size_t)str.length;
-
         size_t initialMeasSize = 128;
         if (foundMonItem == false) {
             log_error("this probably shoudln't happen. check whats going on here lol....");
@@ -137,8 +122,6 @@ static void handler_TheAnswerChanged(
         }
 
         if (ctx->measCache.count == 0) {
-            // Measurement* meas = measurement_create_in_arena(
-            //     ctx->temporaryArena, (char*)str.data, name_len, initialMeasSize);
             Measurement* meas = measurement_create_in_arena(
                 ctx->temporaryArena, item.name.items, item.name.count, initialMeasSize);
             mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
@@ -154,25 +137,12 @@ static void handler_TheAnswerChanged(
                     memcmp(item.name.items, meas->name, item.name.count) == 0) {
                     mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
                     mir_da_arena_append(meas->arena, &meas->data.value, float, val);
-                    // log_info(
-                    //     "MeasDataSize:%zu, capacity:%zu",
-                    //     meas->data.timestamp.count,
-                    //     meas->data.timestamp.capacity);
                     found = true;
                     break;
                 }
             }
             if (!found) {
-                log_info("Variable not found in cache creating one");
-                // Measurement* meas = measurement_create_in_arena(
-                //     ctx->temporaryArena, (char*)str.data, name_len, initialMeasSize);
-                // meas->name = (char*)arena_alloc(meas->arena, name_len + 1, alignof(char));
-                // memcpy(meas->name, str.data, name_len);
-                // meas->name[name_len] = '\0';
-                // mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
-                // mir_da_arena_append(meas->arena, &meas->data.value, float, val);
-                // mir_da_arena_append(ctx->temporaryArena, &ctx->measCache, Measurement, *meas);
-
+                // log_info("Variable not found in cache creating one");
                 Measurement* meas = measurement_create_in_arena(
                     ctx->temporaryArena, item.name.items, item.name.count, initialMeasSize);
                 mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
@@ -231,7 +201,7 @@ static int mirua_subscription_create(
 
     for (size_t i = 0; i < resp.resultsSize; i++) {
         if (resp.results[i].statusCode == UA_STATUSCODE_GOOD) {
-            log_trace("MonitoredItem created, subId=%u", subId);
+            // log_trace("MonitoredItem created, subId=%u", subId);
             MonitoredItem monItem = {
                 .nodeIdx = (uint32_t)i, .subId = subId, .monId = resp.results[i].monitoredItemId};
             sb_arena_append_buf(
@@ -251,39 +221,28 @@ static int mirua_subscription_create(
     UA_CreateMonitoredItemsResponse_clear(&resp);
     return 1;
 }
-static void monCallback(
-    UA_Client* client, void* userdata, UA_UInt32 requestId, UA_CreateMonitoredItemsResponse* r) {
-    if (0 < r->resultsSize && r->results[0].statusCode == UA_STATUSCODE_GOOD) {
-        UA_LOG_INFO(
-            UA_Log_Stdout,
-            UA_LOGCATEGORY_APPLICATION,
-            "Monitoring UA_NS0ID_SERVER_SERVERSTATUS_CURRENTTIME', id %u",
-            r->results[0].monitoredItemId);
+
+static size_t meascache_flush(DbContext* db, arr_Measurements* measCache) {
+    if (!db || !measCache || measCache->count == 0) return 0;
+
+    size_t written = 0;
+    db_write_begin(db);
+    for (size_t i = 0; i < measCache->count; ++i) {
+        Measurement* meas = &measCache->items[i];
+        size_t pairs = (meas->data.timestamp.count < meas->data.value.count)
+            ? meas->data.timestamp.count
+            : meas->data.value.count;
+        for (; pairs; --pairs) {
+            int64_t timestamp = nob_da_pop(&meas->data.timestamp);
+            float value = nob_da_pop(&meas->data.value);
+            UA_DateTimeStruct dts = UA_DateTime_toStruct(timestamp);
+            UA_Int64 epoch_ms = UA_DateTime_toUnixTime(timestamp) * 1000LL + (UA_Int64)dts.milliSec;
+            db_write(db, epoch_ms, meas->name, value);
+            written++;
+        }
     }
-}
-static void handler_currentTimeChanged(
-    UA_Client* client,
-    UA_UInt32 subId,
-    void* subContext,
-    UA_UInt32 monId,
-    void* monContext,
-    UA_DataValue* value) {
-    UA_LOG_INFO(UA_Log_Stdout, UA_LOGCATEGORY_APPLICATION, "currentTime has changed!");
-    if (UA_Variant_hasScalarType(&value->value, &UA_TYPES[UA_TYPES_DATETIME])) {
-        UA_DateTime raw_date = *(UA_DateTime*)value->value.data;
-        UA_DateTimeStruct dts = UA_DateTime_toStruct(raw_date);
-        UA_LOG_INFO(
-            UA_Log_Stdout,
-            UA_LOGCATEGORY_APPLICATION,
-            "date is: %02u-%02u-%04u %02u:%02u:%02u.%03u",
-            dts.day,
-            dts.month,
-            dts.year,
-            dts.hour,
-            dts.min,
-            dts.sec,
-            dts.milliSec);
-    }
+    db_write_end(db);
+    return written;
 }
 
 static void stateCallback(
@@ -329,9 +288,6 @@ typedef struct uadb_config {
     memory_arena* persistentArena;
 } uadb_config;
 
-String_View uadb_get_dir_db() {}
-String_View uadb_get_dir_config() {}
-
 static int uabd_recorder(uadb_config config) {
     // TODO: clean arena at some point. add persistent arena and temp arena that gets cleared
     // more often
@@ -343,6 +299,7 @@ static int uabd_recorder(uadb_config config) {
 
     ctx.temporaryArena = config.temporaryArena;
     ctx.persistentArena = config.persistentArena;
+    ctx.configArena = arena_create(MB(1));
 
     int retVal = fs_sb_get_executable_dir(ctx.persistentArena, &ctx.executableDir);
     if (retVal == -1) {
@@ -376,8 +333,6 @@ static int uabd_recorder(uadb_config config) {
     sb_arena_append_cstr(ctx.persistentArena, &ctx.opcuaConfigPath, config.opcuaConfigFilename);
     sb_arena_append_null(ctx.persistentArena, &ctx.opcuaConfigPath);
 
-    // db_context_init(&ctx.db);
-
     // ================================= SQLITE3 INIT =================================
     // TODO: make them accept sb? or make it accept SV since it doesnt edit it.?
     char* schema = db_read_sql_schema(ctx.schemaPath.items, ctx.temporaryArena);
@@ -395,43 +350,37 @@ static int uabd_recorder(uadb_config config) {
     }
 
     // ================================= CONFIG PARSE =================================
-    char* buf = fs_read_file(ctx.opcuaConfigPath.items, ctx.temporaryArena);
-    if (!buf) {
-        log_error("[UADB] - config read failed. Returning from uadb.");
-        return 0;
-    }
-    ctx.configLastTouch = fs_file_get_last_touch(ctx.opcuaConfigPath.items);
-    Scanner scanner;
-    lx_init(&scanner, buf, ctx.temporaryArena);
-    arr_Tokens* tokens = lx_tokenize(&scanner);
-    Parser parser;
-    parser_init(&parser, tokens, ctx.temporaryArena);
-    // TODO: repeats in reload. find a way to clear it. monitored items currently takes pointer to
-    // the nodes so deleting them in temp
-    // arena would cause problems
-    ctx.nodes = parser_parse(&parser);
+    char* configBuf = fs_read_file(ctx.opcuaConfigPath.items, ctx.temporaryArena);
+    if (configBuf) {
+        ctx.configLastTouch = fs_file_get_last_touch(ctx.opcuaConfigPath.items);
+        ctx.nodes = parser_parse(ctx.configArena, configBuf);
 
-    // =========================== INVALID CONFIG FALLBACK ============================
-    if (ctx.nodes->count == 0) {
-        log_warn("Config didn't contain any nodes. Update config with correct one!");
-        while (ctx.nodes->count == 0) {
+    } else {
+        log_error("[UADB] - config read failed. Trying again in 1s. ");
+        bool valid = false;
+        while (!valid) {
+            log_info(
+                "Memory - Persistent:count%zu,size%zu - temporary:count%zu,size%zu",
+                ctx.persistentArena->offset,
+                ctx.persistentArena->size,
+                ctx.temporaryArena->offset,
+                ctx.temporaryArena->size);
             sleep(1);
             if (fs_file_has_changed(ctx.opcuaConfigPath.items, ctx.configLastTouch)) {
                 log_info("Config file changed. Reloading config");
-                char* buf = fs_read_file(ctx.opcuaConfigPath.items, ctx.temporaryArena);
-                if (!buf) {
-                    log_warn("[APP] - config read failed");
-                    return 0;
+                configBuf = fs_read_file(ctx.opcuaConfigPath.items, ctx.temporaryArena);
+                if (!configBuf) {
+                    log_error("[UADB] - config read failed. Trying again in 1s. ");
+                    continue;
                 }
                 ctx.configLastTouch = fs_file_get_last_touch(ctx.opcuaConfigPath.items);
-                Scanner scanner;
-                lx_init(&scanner, buf, ctx.temporaryArena);
-                arr_Tokens* tokens = lx_tokenize(&scanner);
-                Parser parser;
-                parser_init(&parser, tokens, ctx.temporaryArena);
-                // TODO: repeats in reload. find a way to clear it. monitored items currently takes
-                // pointer to the nodes so deleting them in temp arena would cause problems
-                ctx.nodes = parser_parse(&parser);
+                ctx.nodes = parser_parse(ctx.configArena, configBuf);
+                if (ctx.nodes->count <= 0) {
+                    log_error("[UADB] - config doesn't contain any nodes. Trying again in 1s. ");
+                    continue;
+                } else {
+                    valid = true;
+                }
             } else {
                 log_info("Waiting for config:%s to be modified", ctx.opcuaConfigPath.items);
             }
@@ -447,9 +396,15 @@ static int uabd_recorder(uadb_config config) {
     cc->connectivityCheckInterval = 1000;
     cc->stateCallback = stateCallback;
 
-    UA_StatusCode retval = UA_Client_connect(ctx.client, config.uaEndpoint);
-    if (retval != UA_STATUSCODE_GOOD) {
-        log_warn("Test client failed to connect: %s", UA_StatusCode_name(retval));
+    UA_StatusCode retval = UA_STATUSCODE_BAD;
+    uint retryingTime = 1;
+    while ((retval = UA_Client_connect(ctx.client, config.uaEndpoint)) != UA_STATUSCODE_GOOD) {
+        log_warn(
+            "Failed to connect to %s: %s. Retrying in %u s.",
+            config.uaEndpoint,
+            UA_StatusCode_name(retval),
+            retryingTime);
+        sleep(retryingTime);
     }
 
     // ================================== MAIN LOOP ===================================
@@ -457,6 +412,7 @@ static int uabd_recorder(uadb_config config) {
     ctx.wasDisconnected = true;
     int64_t last_push = now_ms();
     const int64_t push_interval_ms = 5000;
+    arena_reset(ctx.temporaryArena, false);
     while (g_running) {
         // log_info(
         //     "Memory - Persistent:count%zu,size%zu - temporary:count%zu,size%zu",
@@ -475,17 +431,29 @@ static int uabd_recorder(uadb_config config) {
         UA_Client_getState(ctx.client, &ch, &se, &cs);
         if (ch == UA_SECURECHANNELSTATE_CLOSED && cs != UA_STATUSCODE_GOOD &&
             config.autoReconnect) {
-            log_info("Trying to reconnect");
+            log_info("Connection was closed. Trying to reconnect");
             ctx.wasDisconnected = true;
             UA_Client_connect(ctx.client, config.uaEndpoint);
         }
 
         // ============================= CREATE SUBSCRIPTIONS ==============================
         if (st == UA_STATUSCODE_GOOD && ctx.wasDisconnected) {
-            // TODO: Delete old subscriptions
+            // flush measCache to prevent datalos.
+
+            size_t written = meascache_flush(&ctx.db, &ctx.measCache);
+            if (written != 0) {
+                log_info(
+                    "OpcUa was disconnected. flushed measCache and wrote %zu values into db.",
+                    written);
+            }
+
+            // TODO: if this becomes used elsewhere make it into function so i dont forget to memset
+            // the stuff.
+            arena_reset(ctx.temporaryArena, false);
+            memset(&ctx.measCache, 0, sizeof(ctx.measCache));
+            memset(&ctx.monitoredItems, 0, sizeof(ctx.monitoredItems));
+            memset(&ctx.monitoredDeleteQue, 0, sizeof(ctx.monitoredDeleteQue));
             mirua_subscription_create(ctx.client, ctx.nodes, &ctx.currentSubId);
-            // TODO: fiqure out the reason i had arnea reset here :)
-            //  arena_reset(ctx.temporaryArena, false);
             ctx.wasDisconnected = false;
         }
 
@@ -493,45 +461,33 @@ static int uabd_recorder(uadb_config config) {
         int64_t cur = now_ms();
         if (cur - last_push >= push_interval_ms) {
             log_info(
-                "Memory - Persistent:count%zu,size%zu - temporary:count%zu,size%zu",
+                "Memory - Persistent:count%zu,size%zu - temporary:count%zu,size%zu, "
+                "config:%zu,size%zu",
                 ctx.persistentArena->offset,
                 ctx.persistentArena->size,
                 ctx.temporaryArena->offset,
-                ctx.temporaryArena->size);
+                ctx.temporaryArena->size,
+                ctx.configArena->offset,
+                ctx.configArena->size);
 
             last_push = cur;
-            if (ctx.measCache.count == 0) {
-                continue;
-            }
 
-            size_t count = 0;
-            db_write_begin(&ctx.db);
+            size_t total_pairs = 0;
             for (size_t i = 0; i < ctx.measCache.count; i++) {
-                Measurement* meas = &ctx.measCache.items[i];
-                log_info(
-                    "Meas name:%s cacheSize:%zu monitoredItemsSize:%zu deleteSize%zu",
-                    meas->name,
-                    ctx.measCache.count,
-                    ctx.monitoredItems.count,
-                    ctx.monitoredDeleteQue.count);
-                if (meas->data.timestamp.count > 0) {
-                    size_t pairs = (meas->data.timestamp.count < meas->data.value.count)
-                        ? meas->data.timestamp.count
-                        : meas->data.value.count;
-                    for (; pairs; --pairs) {
-                        int64_t timestamp = nob_da_pop(&meas->data.timestamp);
-                        float value = nob_da_pop(&meas->data.value);
-                        UA_DateTimeStruct dts = UA_DateTime_toStruct(timestamp);
-                        UA_Int64 epoch_ms =
-                            UA_DateTime_toUnixTime(timestamp) * 1000LL + (UA_Int64)dts.milliSec;
-
-                        db_write(&ctx.db, epoch_ms, meas->name, value);
-                        count++;
-                    }
+                Measurement* m = &ctx.measCache.items[i];
+                total_pairs += (m->data.timestamp.count < m->data.value.count)
+                    ? m->data.timestamp.count
+                    : m->data.value.count;
+                if (total_pairs > 0) {
+                    break;
                 }
             }
-            db_write_end(&ctx.db);
-            log_trace("Wrote to database with %zu values", count);
+
+            if (total_pairs == 0) {
+            } else {
+                size_t written = meascache_flush(&ctx.db, &ctx.measCache);
+                log_info("Wrote %zu values to db.", written);
+            }
         }
 
         // ======================== DELETING UNUSED MONITOREDITEMS ========================
@@ -566,6 +522,7 @@ static int uabd_recorder(uadb_config config) {
         if (fs_file_has_changed(ctx.opcuaConfigPath.items, ctx.configLastTouch)) {
             log_info("Config file changed. Reloading config");
             arena_reset(ctx.temporaryArena, false);
+            arena_reset(ctx.configArena, false);
             memset(&ctx.measCache, 0, sizeof(ctx.measCache));
             memset(&ctx.monitoredItems, 0, sizeof(ctx.monitoredItems));
             memset(&ctx.monitoredDeleteQue, 0, sizeof(ctx.monitoredDeleteQue));
@@ -576,16 +533,7 @@ static int uabd_recorder(uadb_config config) {
                 return 0;
             }
             ctx.configLastTouch = fs_file_get_last_touch(ctx.opcuaConfigPath.items);
-
-            Scanner scanner;
-            lx_init(&scanner, buf, ctx.temporaryArena);
-            arr_Tokens* tokens = lx_tokenize(&scanner);
-
-            printf("%s", lx_tokensToStringArena(tokens, ctx.temporaryArena));
-
-            Parser parser;
-            parser_init(&parser, tokens, ctx.temporaryArena);
-            ctx.nodes = parser_parse(&parser);
+            ctx.nodes = parser_parse(ctx.configArena, buf);
 
             if (UA_Client_Subscriptions_deleteSingle(ctx.client, ctx.currentSubId) ==
                 UA_STATUSCODE_GOOD) {
