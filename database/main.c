@@ -17,6 +17,7 @@
 #include "core/log.h"
 #include "core/nob.h"
 #include "core/string.h"
+#include "core/types.h"
 #include "include/db_access.h"
 #include "lexer.h"
 #include "open62541/client.h"

@@ -1,32 +1,13 @@
 #pragma once
 #include <stdint.h>
 
-#include "../core/allocator.h"
 #include "../core/nob.h"
+#include "../core/types.h"
 
-#define DB_ARENA_SIZE KB(4)
 typedef struct sqlite3 sqlite3;
 typedef long long int sqlite_int64;
 typedef sqlite_int64 sqlite3_int64;
 typedef struct sqlite3_stmt sqlite3_stmt;
-
-/// Ideas to make C style
-///
-///
-//
-typedef struct arr_f32 {
-    float* items;
-    size_t count;
-    size_t capacity;
-} arr_f32;
-arr_f32* arr_f32_create_in_arena(memory_arena* arena, size_t count);
-
-typedef struct arr_i64 {
-    int64_t* items;
-    size_t count;
-    size_t capacity;
-} arr_i64;
-arr_i64* arr_i64_create_in_arena(memory_arena* arena, size_t count);
 
 typedef struct arr_DataPoints {
     arr_i64 timestamp;

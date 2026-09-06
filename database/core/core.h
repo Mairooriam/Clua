@@ -5,3 +5,4 @@
 #include "log.h"
 #include "nob.h"
 #include "string.h"
+#include "types.h"
