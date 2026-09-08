@@ -78,18 +78,21 @@
         mir_da_arena_append_many((arena), (sb), "", 1, char); \
     } while (0)
 
+#include "nob.h"
+
+#define mir_da_arena_append(arena, da, value, ELEM_T)                 \
+    do {                                                              \
+        mir_da_arena_reserve((arena), (da), (da)->count + 1, ELEM_T); \
+        (da)->items[(da)->count++] = (value);                         \
+    } while (0)
+
 #define mir_sb_arena_append_buf(arena, da, new_items, new_items_count, ELEM_T) \
     mir_da_arena_append_many(arena, da, new_items, new_items_count, ELEM_T)
 
 #define sb_arena_append_buf mir_sb_arena_append_buf
 #define sb_arena_append_cstr mir_sb_arena_append_cstr
 #define sb_arena_append_null mir_sb_arena_append_null
-
-#define mir_da_arena_append(arena, da, ELEM_T, value)                 \
-    do {                                                              \
-        mir_da_arena_reserve((arena), (da), (da)->count + 1, ELEM_T); \
-        (da)->items[(da)->count++] = (value);                         \
-    } while (0)
+#define da_arena_append mir_da_arena_append
 
 typedef struct memory_arena {
     char* data;
@@ -112,3 +115,27 @@ void arena_destroy(memory_arena* a);
 
 bool arena_alloc_copy(memory_arena* arena, const void* src, size_t size, size_t aligment);
 char* arena_strdup(memory_arena* arena, const char* src, size_t alignment);
+
+static int nob_sb_appendf_arena(memory_arena* arena, Nob_String_Builder* sb, const char* fmt, ...) {
+    va_list args;
+
+    va_start(args, fmt);
+    int n = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+
+    // NOTE: the new_capacity needs to be +1 because of the null terminator.
+    // However, further below we increase sb->count by n, not n + 1.
+    // This is because we don't want the sb to include the null terminator. The
+    // user can always sb_append_null() if they want it
+    mir_da_arena_reserve(arena, sb, sb->count + n + 1, char);
+    char* dest = sb->items + sb->count;
+    va_start(args, fmt);
+    vsnprintf(dest, n + 1, fmt, args);
+    va_end(args);
+
+    sb->count += n;
+
+    return n;
+}
+
+#define sb_appendf_arena nob_sb_appendf_arena

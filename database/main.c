@@ -114,7 +114,7 @@ static void handler_TheAnswerChanged(
                 }
             }
             mir_da_arena_append(
-                ctx->temporaryArena, &ctx->monitoredDeleteQue, MonitoredItem, monItem);
+                ctx->temporaryArena, &ctx->monitoredDeleteQue, monItem, MonitoredItem);
 
             log_warn(
                 "Subscripted to not supported variable type, scheduled removal (sub=%u, mon=%u).",
@@ -127,9 +127,9 @@ static void handler_TheAnswerChanged(
         if (ctx->measCache.count == 0) {
             Measurement* meas = measurement_create_in_arena(
                 ctx->temporaryArena, item.name.items, item.name.count, initialMeasSize);
-            mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
-            mir_da_arena_append(meas->arena, &meas->data.value, float, val);
-            mir_da_arena_append(ctx->temporaryArena, &ctx->measCache, Measurement, *meas);
+            mir_da_arena_append(meas->arena, &meas->data.timestamp, timestamp, int64_t);
+            mir_da_arena_append(meas->arena, &meas->data.value, val, float);
+            mir_da_arena_append(ctx->temporaryArena, &ctx->measCache, *meas, Measurement);
         } else {
             bool found = false;
             // TODO: if this bottlenecks convert code to hashmap.
@@ -138,8 +138,8 @@ static void handler_TheAnswerChanged(
                 size_t meas_name_len = meas->name ? strlen(meas->name) : 0;
                 if (meas_name_len == item.name.count &&
                     memcmp(item.name.items, meas->name, item.name.count) == 0) {
-                    mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
-                    mir_da_arena_append(meas->arena, &meas->data.value, float, val);
+                    mir_da_arena_append(meas->arena, &meas->data.timestamp, timestamp, int64_t);
+                    mir_da_arena_append(meas->arena, &meas->data.value, val, float);
                     found = true;
                     break;
                 }
@@ -148,9 +148,9 @@ static void handler_TheAnswerChanged(
                 // log_info("Variable not found in cache creating one");
                 Measurement* meas = measurement_create_in_arena(
                     ctx->temporaryArena, item.name.items, item.name.count, initialMeasSize);
-                mir_da_arena_append(meas->arena, &meas->data.timestamp, int64_t, timestamp);
-                mir_da_arena_append(meas->arena, &meas->data.value, float, val);
-                mir_da_arena_append(ctx->temporaryArena, &ctx->measCache, Measurement, *meas);
+                mir_da_arena_append(meas->arena, &meas->data.timestamp, timestamp, int64_t);
+                mir_da_arena_append(meas->arena, &meas->data.value, val, float);
+                mir_da_arena_append(ctx->temporaryArena, &ctx->measCache, *meas, Measurement);
             }
         }
         // UA_String_clear(&str);
@@ -213,7 +213,7 @@ static int mirua_subscription_create(
                 ctx->nodes->items[i].identifier.string.data,
                 ctx->nodes->items[i].identifier.string.length,
                 char);
-            mir_da_arena_append(ctx->temporaryArena, &ctx->monitoredItems, MonitoredItem, monItem);
+            mir_da_arena_append(ctx->temporaryArena, &ctx->monitoredItems, monItem, MonitoredItem);
         } else {
             log_warn(
                 "Failed to create monitored item: %s",
