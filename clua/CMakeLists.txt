@@ -59,6 +59,37 @@ target_link_libraries(main PRIVATE
 
 )
 
+set(SOURCES
+    src/main_test.c
+    src/log.c
+    src/debug_buf.c
+    modules/mirua_module.c
+    modules/mirua_to_string.c
+    modules/mirua_serialization.c
+    ../database/core/allocator.c
+    ../database/core/fileio.c
+    ../database/core/string.c
+    # modules/file/file_windows.c
+    src/utils.c
+)
+
+# Executable
+add_executable(main_test ${SOURCES})
+target_compile_definitions(main_test PRIVATE LOG_USE_COLOR _CRT_SECURE_NO_WARNINGS _GNU_SOURCE)
+target_include_directories(main_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/modules
+)
+target_link_libraries(main_test PRIVATE
+    open62541::open62541
+    replxx::replxx
+    tinycthread
+    sqlite3
+    Threads::Threads
+
+)
+
 if (WIN32)
     target_link_libraries(main PRIVATE
         ws2_32

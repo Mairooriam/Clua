@@ -484,16 +484,6 @@ void mirua_explore_children(MiruaContext* ctx, mirua_t_NodeList* nodes, const UA
 
     UA_BrowseRequest_clear(&bReq);
     UA_BrowseResponse_clear(&bResp);
-
-    // Testing raw brwose from open65421 for easier addition of stuff
-    //  mirua_clear_nodeList(nodes);
-
-    // MiruaNodeFilter filter = mirua_filter_get_func(ctx->config.filterType);
-    // MiruaCallbackHandle handle = {
-    //     .nodes = nodes, .client = ctx->client, .filter = filter, .userData = ctx};
-
-    // UA_Client_forEachChildNodeCall(ctx->client, *node, mirua_cb_collectNodes_to_nodelist,
-    // &handle);
 }
 
 bool mirua_node_exists(UA_Client* client, const UA_NodeId* node) {

@@ -39,6 +39,12 @@ typedef struct {
     size_t capacity;  // TODO: learn how to implement dynamic size
 } mirua_t_NodeList;
 
+typedef struct {
+    UA_NodeId* items;
+    size_t count;
+    size_t capacity;  // TODO: learn how to implement dynamic size
+} arr_NodeId;
+
 #define MAX_HISTORY 50
 typedef struct {
     MiruaNodeId nodeIds[MAX_HISTORY];
