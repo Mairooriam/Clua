@@ -1,3 +1,5 @@
+#include <assert.h>
+#include <replxx.h>
 #include <stdalign.h>
 #include <stdio.h>
 #include <string.h>
@@ -126,6 +128,7 @@ typedef struct {
     u32 firstChildIdx;
     u32 nextSiblingIdx;
     u32 prevSiblingIdx;
+    bool explored;
 } UA_NodeId_Expanded;
 
 typedef struct {
@@ -135,6 +138,33 @@ typedef struct {
     // memory_arena nodeArena; //TODO: add these here instead of supplying them?
     // memory_arena stringArena;
 } arr_NodeId_Expanded;
+
+static void arr_NodeId_Expanded_addChild(arr_NodeId_Expanded* nodes, u32 childIdx, u32 targetIdx) {
+    UA_NodeId_Expanded* target = &nodes->items[targetIdx];
+    UA_NodeId_Expanded* child = &nodes->items[childIdx];
+
+    if (target->firstChildIdx == 0) {
+        target->firstChildIdx = childIdx;
+        child->parentIdx = targetIdx;
+        return;
+    }
+    child->parentIdx = targetIdx;
+
+    UA_NodeId_Expanded* firstChild = &nodes->items[target->firstChildIdx];
+    // If firstchild doesnt have previous. it is the last
+    if (firstChild->prevSiblingIdx == 0) {
+        firstChild->prevSiblingIdx = childIdx;
+        firstChild->nextSiblingIdx = childIdx;
+        child->nextSiblingIdx = target->firstChildIdx;
+        child->prevSiblingIdx = target->firstChildIdx;
+    } else {
+        u32 oldLastSiblingIdx = firstChild->prevSiblingIdx;
+        firstChild->prevSiblingIdx = childIdx;
+        child->nextSiblingIdx = target->firstChildIdx;
+        nodes->items[oldLastSiblingIdx].nextSiblingIdx = childIdx;
+        child->prevSiblingIdx = oldLastSiblingIdx;
+    }
+}
 
 static void UA_NodeId_Expanded_arena_copy(
     memory_arena* strArena, const UA_ReferenceDescription* src, UA_NodeId_Expanded* dst) {
@@ -175,7 +205,7 @@ static void traverse_subtree_visit(
 }
 
 static void UA_NodeId_Expanded_toString(
-    memory_arena* arena, String_Builder* sb, UA_NodeId_Expanded* node) {
+    memory_arena* arena, String_Builder* sb, const UA_NodeId_Expanded* node) {
     UA_nodeId_toString(arena, sb, node->nodeid);
     sb_appendf_arena(
         arena,
@@ -193,8 +223,9 @@ static void visit_print(
     u32 depth,
     void* user) {
     (void)user;
+    UA_NodeId_Expanded* node = &nodes->items[idx];
     sb_appendf_arena(arena, sb, "%*s[%u] ", (int)(depth * 2), "", idx);
-    UA_NodeId_Expanded_toString(arena, sb, &nodes->items[idx]);
+    UA_NodeId_Expanded_toString(arena, sb, node);
     sb_appendf_arena(arena, sb, "\n");
 }
 
@@ -208,10 +239,17 @@ static void visit_direct_children(
     if (parent_idx == 0) return;
 
     u32 child_idx = nodes->items[parent_idx].firstChildIdx;
-    while (child_idx != 0) {
+    if (child_idx == 0) {
+        log_warn("No Children!");
+        return;
+    }
+
+    u32 firstChild = child_idx;
+    do {
         visitor(arena, sb, nodes, child_idx, 1, user);
         child_idx = nodes->items[child_idx].nextSiblingIdx;
-    }
+
+    } while (child_idx != firstChild);
 }
 
 static void explore_children(
@@ -219,15 +257,15 @@ static void explore_children(
     memory_arena* strArena,
     UA_Client* client,
     arr_NodeId_Expanded* nodes,
-    u64 parent_idx) {
-    UA_NodeId_Expanded* parent = &nodes->items[parent_idx];
+    u64 targetIdx) {
+    UA_NodeId_Expanded* root = &nodes->items[targetIdx];
 
     UA_BrowseRequest bReq;
     UA_BrowseRequest_init(&bReq);
     bReq.nodesToBrowseSize = 1;
     bReq.nodesToBrowse = UA_Array_new(1, &UA_TYPES[UA_TYPES_BROWSEDESCRIPTION]);
     UA_BrowseDescription_init(&bReq.nodesToBrowse[0]);
-    UA_NodeId_copy(&parent->nodeid, &bReq.nodesToBrowse[0].nodeId);
+    UA_NodeId_copy(&root->nodeid, &bReq.nodesToBrowse[0].nodeId);
     bReq.nodesToBrowse[0].browseDirection = UA_BROWSEDIRECTION_FORWARD;
     bReq.nodesToBrowse[0].referenceTypeId = UA_NODEID_NUMERIC(
         0, UA_NS0ID_HIERARCHICALREFERENCES);  // Hierarchical references (includes HasComponent)
@@ -237,75 +275,22 @@ static void explore_children(
 
     UA_BrowseResponse bResp = UA_Client_Service_browse(client, bReq);
 
-    // Process results
     if (bResp.resultsSize > 0) {
-        u32 first_child = 0;
-        u32 prev = 0;
         for (size_t i = 0; i < bResp.results[0].referencesSize; ++i) {
             UA_ReferenceDescription* ref = &bResp.results[0].references[i];
-
             UA_NodeId_Expanded child = {0};
+
             UA_NodeId_Expanded_arena_copy(strArena, ref, &child);
-            child.parentIdx = (u32)parent_idx;
-            child.prevSiblingIdx = prev;
-            child.nextSiblingIdx = 0;
-            child.firstChildIdx = 0;
-
-            size_t child_idx = nodes->count;
+            u32 childIdx = nodes->count;
             da_arena_append(nodeArena, nodes, child, UA_NodeId_Expanded);
-
-            if (first_child == 0) first_child = (u32)child_idx;
-            if (prev != 0) nodes->items[prev].nextSiblingIdx = (u32)child_idx;
-
-            prev = (u32)child_idx;
+            arr_NodeId_Expanded_addChild(nodes, childIdx, targetIdx);
         }
-        parent->firstChildIdx = first_child;
     } else {
         log_warn("[EXPLORE] Browse failed or no results for node");
     }
 
     UA_BrowseRequest_clear(&bReq);
     UA_BrowseResponse_clear(&bResp);
-}
-
-// if (bResp.resultsSize > 0) {
-//     u32 first_child = 0;
-//     u32 prev = 0;
-//     for (size_t i = 0; i < bResp.results[0].referencesSize; ++i) {
-//         UA_ReferenceDescription* ref = &bResp.results[0].references[i];
-//
-//         UA_NodeId_Expanded child = {0};
-//         UA_NodeId_Expanded_arena_copy(strArena, ref, &child);
-//         child.parentIdx = (u32)parent_idx;
-//         child.prevSiblingIdx = prev;
-//         child.nextSiblingIdx = 0;
-//         child.firstChildIdx = 0;
-//
-//         size_t child_idx = nodes->count;
-//         da_arena_append(nodeArena, nodes, child, UA_NodeId_Expanded);
-//
-//         if (first_child == 0) first_child = (u32)child_idx;
-//         if (prev != 0) nodes->items[prev].nextSiblingIdx = (u32)child_idx;
-//
-//         prev = (u32)child_idx;
-//     }
-//     parent->firstChildIdx = first_child;
-// } else {
-//     log_warn("[EXPLORE] Browse failed or no results for node");
-// }
-
-static void print_direct_children(
-    memory_arena* arena, String_Builder* sb, arr_NodeId_Expanded* nodes, u32 parent_idx) {
-    if (parent_idx == 0) return;
-
-    u32 child_idx = nodes->items[parent_idx].firstChildIdx;
-    while (child_idx != 0) {
-        UA_NodeId_Expanded* c = &nodes->items[child_idx];
-        sb_appendf_arena(arena, sb, "[%u] ", child_idx);
-        UA_NodeId_Expanded_toString(arena, sb, c);
-        sb_appendf_arena(arena, sb, "\n");
-        child_idx = c->nextSiblingIdx;
-    }
 }
 
 static void traverse_subtree(
@@ -361,8 +346,177 @@ static void timer_mark(struct Timer* t) {
 static double timer_elapsed_sec(struct Timer* t) {
     return now_sec() - t->start;
 }
+// Command structure
+typedef struct {
+    const char* name;
+    const char* description;
+    uint32_t state;
+    void (*handler)(void* ctx, const char* args);
+} Command;
+void cmd_ls(void* userdata, const char* args);
+void cmd_cd(void* userdata, const char* args);
+void cmd_browse(void* userdata, const char* args);
+void cmd_cd_up(void* userdata, const char* args);
+
+static const Command commands[] = {
+    // Main context commands
+    {"ls", "Connect to OPC-UA server", 0, cmd_ls},
+    {"cd", "Connect to OPC-UA server", 0, cmd_cd},
+    {"cd..", "Connect to OPC-UA server", 0, cmd_cd_up},
+    {"browse", "Connect to OPC-UA server", 0, cmd_browse},
+
+};
+#define COMMAND_COUNT (sizeof(commands) / sizeof(commands[0]))
+
+void dispatch_command(const char* input, uint32_t state, void* userdata) {
+    char cmd[64], arg[256];
+    int args_parsed = sscanf(input, "%63s %255[^\n]", cmd, arg);
+
+    if (args_parsed < 1) return;
+
+    // Find and execute command
+    for (size_t i = 0; i < COMMAND_COUNT; ++i) {
+        if (commands[i].state == 0) {
+            if (strcmp(cmd, commands[i].name) == 0) {
+                const char* args_str = (args_parsed >= 2) ? arg : "";
+                commands[i].handler(userdata, args_str);
+                return;
+            }
+        }
+    }
+
+    printf("Unknown command: %s\n", cmd);
+}
+typedef struct context {
+    memory_arena* nodeArena;
+    memory_arena* strArena;
+    memory_arena* printArena;
+    arr_NodeId_Expanded nodes;
+    UA_Client* client;
+    uint32_t current;
+    uint32_t root;
+} context;
+
+static UA_NodeId_Expanded* thing_get_current_node(const context* ctx) {
+    assert(ctx->current == 0 && "sholdnt happen lol");
+    return &ctx->nodes.items[ctx->current];
+}
+
+void cmd_ls(void* userdata, const char* args) {
+    context* ctx = (context*)userdata;
+    String_Builder sb = {0};
+    arena_reset(ctx->printArena, false);
+    sb_appendf_arena(ctx->printArena, &sb, "%*s{%u} ", (int)(0 * 2), "", ctx->current);
+    UA_NodeId_Expanded_toString(ctx->printArena, &sb, thing_get_current_node(ctx));
+    sb_appendf_arena(ctx->printArena, &sb, "\n");
+
+    visit_direct_children(ctx->printArena, &sb, &ctx->nodes, ctx->current, visit_print, NULL);
+    String_View sv = sb_to_sv(sb);
+    printf(SV_Fmt "\n", SV_ARG(sv));
+}
+void cmd_cd_up(void* userdata, const char* args) {
+    context* ctx = (context*)userdata;
+    String_Builder sb = {0};
+    arena_reset(ctx->printArena, false);
+
+    UA_NodeId_Expanded* currentNode = thing_get_current_node(ctx);
+    u32 parentIdx = currentNode->parentIdx;
+    if (!parentIdx) {
+        log_warn("No parent to cd.. back to");
+        return;
+    }
+
+    ctx->current = parentIdx;
+    if (currentNode->explored) {
+        visit_direct_children(ctx->printArena, &sb, &ctx->nodes, ctx->current, visit_print, NULL);
+        String_View sv = sb_to_sv(sb);
+        printf(SV_Fmt "\n", SV_ARG(sv));
+    } else {
+        ctx->nodes.items[ctx->current].explored = true;
+        explore_children(ctx->nodeArena, ctx->strArena, ctx->client, &ctx->nodes, ctx->current);
+        visit_direct_children(ctx->printArena, &sb, &ctx->nodes, ctx->current, visit_print, NULL);
+        String_View sv = sb_to_sv(sb);
+        printf(SV_Fmt "\n", SV_ARG(sv));
+    }
+}
+
+void cmd_cd(void* userdata, const char* args) {
+    context* ctx = (context*)userdata;
+    memory_arena* printArena = arena_create(MB(3));
+    String_Builder sb = {0};
+    arena_reset(printArena, false);
+
+    if (strcmp(args, "..") == 0) {
+        cmd_cd_up(ctx, "");
+    }
+
+    // TARGET NODE
+    int index;
+    if (sscanf(args, "%d", &index) != 1) {
+        log_warn("No such node available");
+        return;
+    }
+    ctx->current = index;
+    UA_NodeId_Expanded* node = &ctx->nodes.items[ctx->current];
+
+    if (node->explored) {
+        visit_direct_children(printArena, &sb, &ctx->nodes, index, visit_print, NULL);
+        String_View sv = sb_to_sv(sb);
+        printf(SV_Fmt "\n", SV_ARG(sv));
+    } else {
+        ctx->nodes.items[ctx->current].explored = true;
+        explore_children(ctx->nodeArena, ctx->strArena, ctx->client, &ctx->nodes, index);
+        visit_direct_children(printArena, &sb, &ctx->nodes, index, visit_print, NULL);
+        String_View sv = sb_to_sv(sb);
+        printf(SV_Fmt "\n", SV_ARG(sv));
+    }
+}
+void cmd_browse(void* userdata, const char* args) {
+    // Should first delete the nodes children its browsing.
+    // then rebrowse
+    //     context* ctx = (context*)userdata;
+    //     explore_children(ctx->nodeArena, ctx->strArena, ctx->client, &ctx->nodes,
+    //     ctx->nodes.current); memory_arena* printArena = arena_create(MB(3));
+    //
+    //     String_Builder sb = {0};
+    //     arena_reset(printArena, false);
+    //     visit_direct_children(printArena, &sb, &ctx->nodes, 1, visit_print, NULL);
+    //     String_View sv = sb_to_sv(sb);
+    //     printf(SV_Fmt "\n", SV_ARG(sv));
+}
+
+void completion_callback(
+    const char* prefix, replxx_completions* completions, int* context_len, void* user_data) {
+    if (!prefix) {
+        if (context_len) *context_len = 0;
+        return;
+    }
+
+    // Find the start of the current word (after last space)
+    const char* word_start = strrchr(prefix, ' ');
+    if (word_start) {
+        word_start++;  // Skip the space
+    } else {
+        word_start = prefix;  // No space found, entire prefix is the word
+    }
+
+    size_t word_len = strlen(word_start);
+    if (context_len) *context_len = (int)word_len;
+
+    // Only complete if we're at the beginning (first word = command)
+    if (word_start == prefix) {
+        for (size_t i = 0; i < COMMAND_COUNT; ++i) {
+            if (commands[i].state == 0) {
+                if (strncmp(commands[i].name, word_start, word_len) == 0) {
+                    replxx_add_completion(completions, commands[i].name);
+                }
+            }
+        }
+    }
+}
 
 int main(int argc, char* argv[]) {
+    printf("sizeof uanode:%zu", sizeof(UA_NodeId_Expanded));
     UA_Client* client = UA_Client_new();
     UA_ClientConfig* cc = UA_Client_getConfig(client);
     UA_ClientConfig_setDefault(cc);
@@ -370,47 +524,61 @@ int main(int argc, char* argv[]) {
     UA_StatusCode retval = UA_Client_connect(client, uaEndpoint);
 
     // UA_NodeId root = UA_NODEID_NUMERIC(0, 85);
-    memory_arena* nodeArena = arena_create(MB(2));
-    memory_arena* strArena = arena_create(MB(2));
+    context ctx;
+    ctx.nodeArena = arena_create(MB(2));
+    ctx.strArena = arena_create(MB(2));
+    ctx.printArena = arena_create(MB(3));
 
-    arr_NodeId_Expanded nodes = {0};
+    ctx.client = client;
+
+    // arr_NodeId_Expanded nodes = {0};
+    memset(&ctx.nodes, 0, sizeof(ctx.nodes));
     // TODO: intialize proper sentinel.
-    da_arena_append(nodeArena, &nodes, (UA_NodeId_Expanded){0}, UA_NodeId_Expanded);
+    da_arena_append(ctx.nodeArena, &ctx.nodes, (UA_NodeId_Expanded){0}, UA_NodeId_Expanded);
 
-    size_t root_idx = nodes.count;
+    ctx.root = ctx.nodes.count;
+    ctx.current = ctx.root;
     da_arena_append(
-        nodeArena,
-        &nodes,
+        ctx.nodeArena,
+        &ctx.nodes,
         (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 85)},
         UA_NodeId_Expanded);
 
-    explore_children(nodeArena, strArena, client, &nodes, root_idx);
-
-    memory_arena* printArena = arena_create(MB(1));
-    // sb_arena_append_cstr(printArena, &sb, "hello");
+    // memory_arena* printArena = arena_create(MB(3));
+    //
     // String_Builder sb = {0};
-    // sb.count = 0;
-    // for (size_t i = 0; i < nodes.count; i++) {
-    //     UA_NodeId_Expanded curNode = nodes.items[i];
-    //     sb_appendf_arena(printArena, &sb, "[%zu]", i);
-    //     UA_NodeId_Expanded_toString(printArena, &sb, &curNode);
-    //     sb_appendf_arena(printArena, &sb, "\n");
-    // }
+    // arena_reset(printArena, false);
+    // visit_direct_children(printArena, &sb, &nodes, 1, visit_print, NULL);
     // String_View sv = sb_to_sv(sb);
     // printf(SV_Fmt "\n", SV_ARG(sv));
 
-    String_Builder sb = {0};
-    arena_reset(printArena, false);
-    struct Timer t1 = {0};
-    timer_start(&t1);
-    visit_direct_children(printArena, &sb, &nodes, 1, visit_print, NULL);
-    timer_mark(&t1);
-    printf(
-        "callback: %.6f s total, %.6f us each\n",
-        timer_elapsed_sec(&t1),
-        1e6 * timer_elapsed_sec(&t1) / (double)t1.count);
-    String_View sv = sb_to_sv(sb);
-    printf(SV_Fmt "\n", SV_ARG(sv));
+    // MiruaContext* ctx = mirua_module_create();
+    Replxx* replxx = replxx_init();
+
+    // Set autocomplete callback
+    replxx_set_completion_callback(replxx, completion_callback, NULL);
+
+    while (1) {
+        const char* input = replxx_input(replxx, "mirwiz> ");
+        if (!input) {
+            printf("\nGoodbye!\n");
+            break;
+        }
+
+        if (strlen(input) == 0) continue;
+
+        replxx_history_add(replxx, input);
+
+        if (strcmp(input, "exit") == 0 || strcmp(input, "quit") == 0) {
+            printf("Goodbye!\n");
+            break;
+        }
+
+        dispatch_command(input, 0, (void*)&ctx);
+    }
+
+    replxx_end(replxx);
+    // mirua_module_free(ctx);
 
     return 0;
 }
