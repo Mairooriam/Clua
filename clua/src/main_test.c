@@ -1,7 +1,9 @@
 #include <assert.h>
 #include <replxx.h>
 #include <stdalign.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -131,15 +133,121 @@ typedef struct {
     bool explored;
 } UA_NodeId_Expanded;
 
-typedef struct {
-    UA_NodeId_Expanded* items;
-    size_t count;
-    size_t capacity;
-    // memory_arena nodeArena; //TODO: add these here instead of supplying them?
-    // memory_arena stringArena;
-} arr_NodeId_Expanded;
+#define MAX_NODES 5
+// firstFree  = 2
+// lastFree = 7
+// nextfree : [0,0,3,7,0,0,0,0,0,0]
+// items :    [x,x,d,d,x,x,x,d,x,x]
+// idx :      [0,1,2,3,4,5,6,7,8,9]
+//
+typedef struct Node_Pool {
+    UA_NodeId_Expanded items[MAX_NODES];
+    bool used[MAX_NODES];
+    uint32_t nextFree[MAX_NODES];
+    uint32_t gen[MAX_NODES];
+    uint32_t firstFree;
+    // uint32_t lastFree;
+    // TODO: do lastFree for reasons of first in last out
+    uint32_t count;
+} Node_Pool;
 
-static void arr_NodeId_Expanded_addChild(arr_NodeId_Expanded* nodes, u32 childIdx, u32 targetIdx) {
+void printPool(Node_Pool* pool) {
+    String_Builder nextFreeSb = {0};
+    String_Builder gen = {0};
+    String_Builder used = {0};
+    String_Builder idx = {0};
+
+    sb_appendf(&nextFreeSb, "nextFree : [");
+    sb_appendf(&gen, "gen      : [");
+    sb_appendf(&used, "used     : [");
+    sb_appendf(&idx, "idx      : [");
+
+    for (u32 i = 0; i < MAX_NODES; i++) {
+        sb_appendf(&nextFreeSb, "%2u ", pool->nextFree[i]);
+        sb_appendf(&gen, "%2u ", pool->gen[i]);
+        sb_appendf(&used, "%2u ", pool->used[i]);
+        sb_appendf(&idx, "%2u ", i);
+    }
+    sb_appendf(&nextFreeSb, "]\n");
+    sb_appendf(&gen, "]\n");
+    sb_appendf(&used, "]\n");
+    sb_appendf(&idx, "]\n");
+
+    String_View sv = sb_to_sv(nextFreeSb);
+    printf(SV_Fmt, SV_ARG(sv));
+    sv = sb_to_sv(gen);
+    printf(SV_Fmt, SV_ARG(sv));
+    sv = sb_to_sv(used);
+    printf(SV_Fmt, SV_ARG(sv));
+    sv = sb_to_sv(idx);
+    printf(SV_Fmt, SV_ARG(sv));
+
+    printf("firstFree:%2u\n", pool->firstFree);
+    printf("firstFree:%2u\n", pool->count);
+}
+
+static void NodePool_init(Node_Pool* pool) {
+    memset(pool, 0, sizeof(*pool));
+    for (uint32_t i = 1; i < MAX_NODES; ++i) {
+        pool->nextFree[i] = i + 1;
+    }
+    pool->nextFree[MAX_NODES - 1] = 0;
+    pool->firstFree = 1;
+    // pool->lastFree = MAX_NODES - 1;
+    pool->count = 0;
+}
+
+static uint32_t NodePool_find_empty(Node_Pool* pool) {
+    return pool->firstFree;
+}
+
+static uint32_t NodePool_add(Node_Pool* pool, UA_NodeId_Expanded node) {
+    uint32_t slot = NodePool_find_empty(pool);
+    assert(slot != 0 && "Pool is full");
+
+    // TODO: init the freelist somehow? or make it usefull from begining as zero initialized?
+    // somehow?
+
+    if (slot) {
+        log_trace("Adding node to slot:[%u]", slot);
+        pool->items[slot] = node;
+        pool->used[slot] = true;
+        pool->gen[slot]++;
+        pool->firstFree = pool->nextFree[slot];
+        pool->nextFree[slot] = 0;
+        return slot;
+    } else {
+        return 0;
+    }
+}
+static void NodePool_remove(Node_Pool* pool, uint32_t idx) {
+    // TODO: test this.
+    if (idx > 0 && idx < MAX_NODES) {
+        log_trace("Removing node from slot:[%u]", idx);
+        // if (pool->firstFree && pool->lastFree) {
+        if (pool->firstFree) {
+            pool->nextFree[idx] = pool->firstFree;
+        }
+        pool->firstFree = idx;
+        pool->used[idx] = false;
+    }
+}
+static UA_NodeId_Expanded* NodePool_get(Node_Pool* pool, uint32_t idx) {
+    if (idx > 0 && idx < MAX_NODES) {
+        return &pool->items[idx];
+    } else {
+        return &pool->items[0];
+    }
+}
+
+static uint32_t NodePool_get_last(Node_Pool* pool) {
+    // assert(pool->count < MAX_NODES && "lol");
+    //
+    // pool->items[pool->count++ + 1] = node;
+    // return pool->count + 1;
+}
+
+static void NodePool_add_child(Node_Pool* nodes, u32 childIdx, u32 targetIdx) {
     UA_NodeId_Expanded* target = &nodes->items[targetIdx];
     UA_NodeId_Expanded* child = &nodes->items[childIdx];
 
@@ -166,6 +274,14 @@ static void arr_NodeId_Expanded_addChild(arr_NodeId_Expanded* nodes, u32 childId
     }
 }
 
+typedef struct {
+    UA_NodeId_Expanded* items;
+    size_t count;
+    size_t capacity;
+    // memory_arena nodeArena; //TODO: add these here instead of supplying them?
+    // memory_arena stringArena;
+} arr_NodeId_Expanded;
+
 static void UA_NodeId_Expanded_arena_copy(
     memory_arena* strArena, const UA_ReferenceDescription* src, UA_NodeId_Expanded* dst) {
     memset(dst, 0, sizeof(*dst));
@@ -178,7 +294,7 @@ static void UA_NodeId_Expanded_arena_copy(
 typedef void (*NodeVisitor)(
     memory_arena* arena,
     String_Builder* sb,
-    arr_NodeId_Expanded* nodes,
+    UA_NodeId_Expanded nodes[],
     u32 idx,
     u32 depth,
     void* user);
@@ -186,7 +302,7 @@ typedef void (*NodeVisitor)(
 static void traverse_subtree_visit(
     memory_arena* arena,
     String_Builder* sb,
-    arr_NodeId_Expanded* nodes,
+    UA_NodeId_Expanded nodes[],
     u32 idx,
     u32 depth,
     NodeVisitor visitor,
@@ -196,12 +312,10 @@ static void traverse_subtree_visit(
     visitor(arena, sb, nodes, idx, depth, user);
 
     // child is deeper
-    traverse_subtree_visit(
-        arena, sb, nodes, nodes->items[idx].firstChildIdx, depth + 1, visitor, user);
+    traverse_subtree_visit(arena, sb, nodes, nodes[idx].firstChildIdx, depth + 1, visitor, user);
 
     // sibling stays same depth
-    traverse_subtree_visit(
-        arena, sb, nodes, nodes->items[idx].nextSiblingIdx, depth, visitor, user);
+    traverse_subtree_visit(arena, sb, nodes, nodes[idx].nextSiblingIdx, depth, visitor, user);
 }
 
 static void UA_NodeId_Expanded_toString(
@@ -218,12 +332,12 @@ static void UA_NodeId_Expanded_toString(
 static void visit_print(
     memory_arena* arena,
     String_Builder* sb,
-    arr_NodeId_Expanded* nodes,
+    UA_NodeId_Expanded nodes[],
     u32 idx,
     u32 depth,
     void* user) {
     (void)user;
-    UA_NodeId_Expanded* node = &nodes->items[idx];
+    UA_NodeId_Expanded* node = &nodes[idx];
     sb_appendf_arena(arena, sb, "%*s[%u] ", (int)(depth * 2), "", idx);
     UA_NodeId_Expanded_toString(arena, sb, node);
     sb_appendf_arena(arena, sb, "\n");
@@ -232,13 +346,13 @@ static void visit_print(
 static void visit_direct_children(
     memory_arena* arena,
     String_Builder* sb,
-    arr_NodeId_Expanded* nodes,
+    UA_NodeId_Expanded nodes[],
     u32 parent_idx,
     NodeVisitor visitor,
     void* user) {
     if (parent_idx == 0) return;
 
-    u32 child_idx = nodes->items[parent_idx].firstChildIdx;
+    u32 child_idx = nodes[parent_idx].firstChildIdx;
     if (child_idx == 0) {
         log_warn("No Children!");
         return;
@@ -247,17 +361,13 @@ static void visit_direct_children(
     u32 firstChild = child_idx;
     do {
         visitor(arena, sb, nodes, child_idx, 1, user);
-        child_idx = nodes->items[child_idx].nextSiblingIdx;
+        child_idx = nodes[child_idx].nextSiblingIdx;
 
     } while (child_idx != firstChild);
 }
 
 static void explore_children(
-    memory_arena* nodeArena,
-    memory_arena* strArena,
-    UA_Client* client,
-    arr_NodeId_Expanded* nodes,
-    u64 targetIdx) {
+    memory_arena* strArena, UA_Client* client, Node_Pool* nodes, u64 targetIdx) {
     UA_NodeId_Expanded* root = &nodes->items[targetIdx];
 
     UA_BrowseRequest bReq;
@@ -281,9 +391,8 @@ static void explore_children(
             UA_NodeId_Expanded child = {0};
 
             UA_NodeId_Expanded_arena_copy(strArena, ref, &child);
-            u32 childIdx = nodes->count;
-            da_arena_append(nodeArena, nodes, child, UA_NodeId_Expanded);
-            arr_NodeId_Expanded_addChild(nodes, childIdx, targetIdx);
+            u32 childIdx = NodePool_add(nodes, child);
+            NodePool_add_child(nodes, childIdx, targetIdx);
         }
     } else {
         log_warn("[EXPLORE] Browse failed or no results for node");
@@ -387,18 +496,18 @@ void dispatch_command(const char* input, uint32_t state, void* userdata) {
 
     printf("Unknown command: %s\n", cmd);
 }
+
 typedef struct context {
-    memory_arena* nodeArena;
     memory_arena* strArena;
     memory_arena* printArena;
-    arr_NodeId_Expanded nodes;
+    Node_Pool nodes;
     UA_Client* client;
     uint32_t current;
     uint32_t root;
 } context;
 
-static UA_NodeId_Expanded* thing_get_current_node(const context* ctx) {
-    assert(ctx->current == 0 && "sholdnt happen lol");
+static UA_NodeId_Expanded* thing_get_current_node(context* ctx) {
+    assert(ctx->current != 0 && "sholdnt happen lol");
     return &ctx->nodes.items[ctx->current];
 }
 
@@ -410,7 +519,7 @@ void cmd_ls(void* userdata, const char* args) {
     UA_NodeId_Expanded_toString(ctx->printArena, &sb, thing_get_current_node(ctx));
     sb_appendf_arena(ctx->printArena, &sb, "\n");
 
-    visit_direct_children(ctx->printArena, &sb, &ctx->nodes, ctx->current, visit_print, NULL);
+    visit_direct_children(ctx->printArena, &sb, ctx->nodes.items, ctx->current, visit_print, NULL);
     String_View sv = sb_to_sv(sb);
     printf(SV_Fmt "\n", SV_ARG(sv));
 }
@@ -419,25 +528,28 @@ void cmd_cd_up(void* userdata, const char* args) {
     String_Builder sb = {0};
     arena_reset(ctx->printArena, false);
 
-    UA_NodeId_Expanded* currentNode = thing_get_current_node(ctx);
-    u32 parentIdx = currentNode->parentIdx;
-    if (!parentIdx) {
-        log_warn("No parent to cd.. back to");
-        return;
-    }
-
-    ctx->current = parentIdx;
-    if (currentNode->explored) {
-        visit_direct_children(ctx->printArena, &sb, &ctx->nodes, ctx->current, visit_print, NULL);
-        String_View sv = sb_to_sv(sb);
-        printf(SV_Fmt "\n", SV_ARG(sv));
-    } else {
-        ctx->nodes.items[ctx->current].explored = true;
-        explore_children(ctx->nodeArena, ctx->strArena, ctx->client, &ctx->nodes, ctx->current);
-        visit_direct_children(ctx->printArena, &sb, &ctx->nodes, ctx->current, visit_print, NULL);
-        String_View sv = sb_to_sv(sb);
-        printf(SV_Fmt "\n", SV_ARG(sv));
-    }
+    // UA_NodeId_Expanded* currentNode = thing_get_current_node(ctx);
+    // u32 parentIdx = currentNode->parentIdx;
+    // if (!parentIdx) {
+    //     log_warn("No parent to cd.. back to");
+    //     return;
+    // }
+    //
+    // ctx->current = parentIdx;
+    // if (currentNode->explored) {
+    //     visit_direct_children(
+    //         ctx->printArena, &sb, ctx->nodes.items, ctx->current, visit_print, NULL);
+    //     String_View sv = sb_to_sv(sb);
+    //     printf(SV_Fmt "\n", SV_ARG(sv));
+    // } else {
+    //     ctx->nodes.items[ctx->current].explored = true;
+    //     explore_children(
+    //         ctx->nodeArena, ctx->strArena, ctx->client, ctx->nodes.items, ctx->current);
+    //     visit_direct_children(
+    //         ctx->printArena, &sb, ctx->nodes.items, ctx->current, visit_print, NULL);
+    //     String_View sv = sb_to_sv(sb);
+    //     printf(SV_Fmt "\n", SV_ARG(sv));
+    // }
 }
 
 void cmd_cd(void* userdata, const char* args) {
@@ -446,30 +558,30 @@ void cmd_cd(void* userdata, const char* args) {
     String_Builder sb = {0};
     arena_reset(printArena, false);
 
-    if (strcmp(args, "..") == 0) {
-        cmd_cd_up(ctx, "");
-    }
-
-    // TARGET NODE
-    int index;
-    if (sscanf(args, "%d", &index) != 1) {
-        log_warn("No such node available");
-        return;
-    }
-    ctx->current = index;
-    UA_NodeId_Expanded* node = &ctx->nodes.items[ctx->current];
-
-    if (node->explored) {
-        visit_direct_children(printArena, &sb, &ctx->nodes, index, visit_print, NULL);
-        String_View sv = sb_to_sv(sb);
-        printf(SV_Fmt "\n", SV_ARG(sv));
-    } else {
-        ctx->nodes.items[ctx->current].explored = true;
-        explore_children(ctx->nodeArena, ctx->strArena, ctx->client, &ctx->nodes, index);
-        visit_direct_children(printArena, &sb, &ctx->nodes, index, visit_print, NULL);
-        String_View sv = sb_to_sv(sb);
-        printf(SV_Fmt "\n", SV_ARG(sv));
-    }
+    // if (strcmp(args, "..") == 0) {
+    //     cmd_cd_up(ctx, "");
+    // }
+    //
+    // // TARGET NODE
+    // int index;
+    // if (sscanf(args, "%d", &index) != 1) {
+    //     log_warn("No such node available");
+    //     return;
+    // }
+    // ctx->current = index;
+    // UA_NodeId_Expanded* node = &ctx->nodes.items[ctx->current];
+    //
+    // if (node->explored) {
+    //     visit_direct_children(printArena, &sb, ctx->nodes.items, index, visit_print, NULL);
+    //     String_View sv = sb_to_sv(sb);
+    //     printf(SV_Fmt "\n", SV_ARG(sv));
+    // } else {
+    //     ctx->nodes.items[ctx->current].explored = true;
+    //     explore_children(ctx->nodeArena, ctx->strArena, ctx->client, ctx->nodes.items, index);
+    //     visit_direct_children(printArena, &sb, ctx->nodes.items, index, visit_print, NULL);
+    //     String_View sv = sb_to_sv(sb);
+    //     printf(SV_Fmt "\n", SV_ARG(sv));
+    // }
 }
 void cmd_browse(void* userdata, const char* args) {
     // Should first delete the nodes children its browsing.
@@ -525,25 +637,52 @@ int main(int argc, char* argv[]) {
 
     // UA_NodeId root = UA_NODEID_NUMERIC(0, 85);
     context ctx;
-    ctx.nodeArena = arena_create(MB(2));
     ctx.strArena = arena_create(MB(2));
     ctx.printArena = arena_create(MB(3));
 
     ctx.client = client;
 
     // arr_NodeId_Expanded nodes = {0};
-    memset(&ctx.nodes, 0, sizeof(ctx.nodes));
-    // TODO: intialize proper sentinel.
-    da_arena_append(ctx.nodeArena, &ctx.nodes, (UA_NodeId_Expanded){0}, UA_NodeId_Expanded);
+    // memset(&ctx.nodes, 0, sizeof(ctx.nodes));
+    NodePool_init(&ctx.nodes);
 
-    ctx.root = ctx.nodes.count;
+    log_set_level(LOG_TRACE);
+    ctx.root = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 85)});
     ctx.current = ctx.root;
-    da_arena_append(
-        ctx.nodeArena,
-        &ctx.nodes,
-        (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 85)},
-        UA_NodeId_Expanded);
+    printPool(&ctx.nodes);
+    u32 idx = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 15)});
+    u32 idx2 = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 25)});
+    u32 idx3 = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    printPool(&ctx.nodes);
+    NodePool_remove(&ctx.nodes, 2);
+    NodePool_remove(&ctx.nodes, 3);
+    printPool(&ctx.nodes);
+    NodePool_remove(&ctx.nodes, 4);
+    idx = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 15)});
+    idx2 = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 25)});
+    idx3 = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    NodePool_remove(&ctx.nodes, 3);
+    NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    NodePool_remove(&ctx.nodes, 3);
+    NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    NodePool_remove(&ctx.nodes, 3);
+    NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    NodePool_remove(&ctx.nodes, 3);
+    NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    NodePool_remove(&ctx.nodes, 3);
+    NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
 
+    printPool(&ctx.nodes);
+
+    u32 idx4 = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 45)});
+
+    String_Builder sb = {0};
+    thing_get_current_node(&ctx)->explored = true;
+    explore_children(ctx.strArena, ctx.client, &ctx.nodes, 1);
+    visit_direct_children(ctx.printArena, &sb, ctx.nodes.items, 1, visit_print, NULL);
+    String_View sv = sb_to_sv(sb);
+    printf(SV_Fmt "\n", SV_ARG(sv));
+    //
     // memory_arena* printArena = arena_create(MB(3));
     //
     // String_Builder sb = {0};
@@ -552,7 +691,6 @@ int main(int argc, char* argv[]) {
     // String_View sv = sb_to_sv(sb);
     // printf(SV_Fmt "\n", SV_ARG(sv));
 
-    // MiruaContext* ctx = mirua_module_create();
     Replxx* replxx = replxx_init();
 
     // Set autocomplete callback
