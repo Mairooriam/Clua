@@ -131,7 +131,7 @@ typedef struct {
     u32 nextSiblingIdx;
     u32 prevSiblingIdx;
     bool explored;
-} UA_NodeId_Expanded;
+} UaNodeIdExpanded;
 
 #define MAX_NODES 5
 // firstFree  = 2
@@ -140,18 +140,35 @@ typedef struct {
 // items :    [x,x,d,d,x,x,x,d,x,x]
 // idx :      [0,1,2,3,4,5,6,7,8,9]
 //
+
 typedef struct Node_Pool {
-    UA_NodeId_Expanded items[MAX_NODES];
+    UaNodeIdExpanded items[MAX_NODES];
     bool used[MAX_NODES];
     uint32_t nextFree[MAX_NODES];
     uint32_t gen[MAX_NODES];
     uint32_t firstFree;
-    // uint32_t lastFree;
+    uint32_t lastFree;
     // TODO: do lastFree for reasons of first in last out
     uint32_t count;
-} Node_Pool;
+} NodePool;
 
-void printPool(Node_Pool* pool) {
+typedef struct NodeRef {
+    u32 idx;
+    u32 gen;
+} NodeRef;
+static u32 node_deref(NodePool* pool, NodeRef ref) {
+    if (ref.idx > 0 && ref.idx < MAX_NODES && pool->used[ref.idx] &&
+        pool->gen[ref.idx] == ref.gen) {
+        return ref.idx;
+    } else {
+        return 0;
+    }
+}
+static NodeRef node_nil(void) {
+    return (NodeRef){0, 0};
+}
+
+static void printPool(NodePool* pool) {
     String_Builder nextFreeSb = {0};
     String_Builder gen = {0};
     String_Builder used = {0};
@@ -183,73 +200,70 @@ void printPool(Node_Pool* pool) {
     printf(SV_Fmt, SV_ARG(sv));
 
     printf("firstFree:%2u\n", pool->firstFree);
-    printf("firstFree:%2u\n", pool->count);
+    printf("lastFree:%2u\n", pool->lastFree);
+
+    printf("count:%2u\n", pool->count);
 }
 
-static void NodePool_init(Node_Pool* pool) {
+static void node_pool_init(NodePool* pool) {
     memset(pool, 0, sizeof(*pool));
-    for (uint32_t i = 1; i < MAX_NODES; ++i) {
+    for (uint32_t i = 1; i < MAX_NODES - 1; ++i) {
         pool->nextFree[i] = i + 1;
     }
     pool->nextFree[MAX_NODES - 1] = 0;
     pool->firstFree = 1;
-    // pool->lastFree = MAX_NODES - 1;
+    pool->lastFree = MAX_NODES - 1;
     pool->count = 0;
 }
 
-static uint32_t NodePool_find_empty(Node_Pool* pool) {
+static UaNodeIdExpanded* node_pool_get(NodePool* pool, NodeRef ref) {
+    return &pool->items[node_deref(pool, ref)];
+}
+
+static uint32_t node_pool_find_empty(NodePool* pool) {
     return pool->firstFree;
 }
 
-static uint32_t NodePool_add(Node_Pool* pool, UA_NodeId_Expanded node) {
-    uint32_t slot = NodePool_find_empty(pool);
+static NodeRef NodePool_add(NodePool* pool, UaNodeIdExpanded node) {
+    uint32_t slot = pool->firstFree;
     assert(slot != 0 && "Pool is full");
 
-    // TODO: init the freelist somehow? or make it usefull from begining as zero initialized?
-    // somehow?
-
-    if (slot) {
-        log_trace("Adding node to slot:[%u]", slot);
-        pool->items[slot] = node;
-        pool->used[slot] = true;
-        pool->gen[slot]++;
-        pool->firstFree = pool->nextFree[slot];
-        pool->nextFree[slot] = 0;
-        return slot;
-    } else {
-        return 0;
+    log_trace("Adding node to slot:[%u]", slot);
+    pool->firstFree = pool->nextFree[slot];
+    if (pool->firstFree == 0) {
+        pool->lastFree = 0;
     }
+
+    pool->nextFree[slot] = 0;
+    pool->items[slot] = node;
+    pool->used[slot] = true;
+    pool->gen[slot]++;
+    pool->count++;
+
+    return (NodeRef){slot, pool->gen[slot]};
 }
-static void NodePool_remove(Node_Pool* pool, uint32_t idx) {
-    // TODO: test this.
-    if (idx > 0 && idx < MAX_NODES) {
-        log_trace("Removing node from slot:[%u]", idx);
-        // if (pool->firstFree && pool->lastFree) {
-        if (pool->firstFree) {
-            pool->nextFree[idx] = pool->firstFree;
-        }
+
+static void node_pool_remove(NodePool* pool, NodeRef ref) {
+    u32 idx = node_deref(pool, ref);
+    assert(idx != 0 && "Trying to remove nil");
+
+    log_trace("Removing node from slot:[%u]", idx);
+    pool->used[idx] = false;
+    pool->nextFree[idx] = 0;
+
+    if (pool->lastFree != 0) {
+        pool->nextFree[pool->lastFree] = idx;
+    } else {
         pool->firstFree = idx;
-        pool->used[idx] = false;
     }
-}
-static UA_NodeId_Expanded* NodePool_get(Node_Pool* pool, uint32_t idx) {
-    if (idx > 0 && idx < MAX_NODES) {
-        return &pool->items[idx];
-    } else {
-        return &pool->items[0];
-    }
+
+    pool->lastFree = idx;
+    pool->count--;
 }
 
-static uint32_t NodePool_get_last(Node_Pool* pool) {
-    // assert(pool->count < MAX_NODES && "lol");
-    //
-    // pool->items[pool->count++ + 1] = node;
-    // return pool->count + 1;
-}
-
-static void NodePool_add_child(Node_Pool* nodes, u32 childIdx, u32 targetIdx) {
-    UA_NodeId_Expanded* target = &nodes->items[targetIdx];
-    UA_NodeId_Expanded* child = &nodes->items[childIdx];
+static void NodePool_add_child(NodePool* nodes, u32 childIdx, u32 targetIdx) {
+    UaNodeIdExpanded* target = &nodes->items[targetIdx];
+    UaNodeIdExpanded* child = &nodes->items[childIdx];
 
     if (target->firstChildIdx == 0) {
         target->firstChildIdx = childIdx;
@@ -258,7 +272,7 @@ static void NodePool_add_child(Node_Pool* nodes, u32 childIdx, u32 targetIdx) {
     }
     child->parentIdx = targetIdx;
 
-    UA_NodeId_Expanded* firstChild = &nodes->items[target->firstChildIdx];
+    UaNodeIdExpanded* firstChild = &nodes->items[target->firstChildIdx];
     // If firstchild doesnt have previous. it is the last
     if (firstChild->prevSiblingIdx == 0) {
         firstChild->prevSiblingIdx = childIdx;
@@ -275,7 +289,7 @@ static void NodePool_add_child(Node_Pool* nodes, u32 childIdx, u32 targetIdx) {
 }
 
 typedef struct {
-    UA_NodeId_Expanded* items;
+    UaNodeIdExpanded* items;
     size_t count;
     size_t capacity;
     // memory_arena nodeArena; //TODO: add these here instead of supplying them?
@@ -283,7 +297,7 @@ typedef struct {
 } arr_NodeId_Expanded;
 
 static void UA_NodeId_Expanded_arena_copy(
-    memory_arena* strArena, const UA_ReferenceDescription* src, UA_NodeId_Expanded* dst) {
+    memory_arena* strArena, const UA_ReferenceDescription* src, UaNodeIdExpanded* dst) {
     memset(dst, 0, sizeof(*dst));
     UA_NodeId_copy_arena(strArena, &src->nodeId.nodeId, &dst->nodeid);
     dst->nodeClass = src->nodeClass;
@@ -294,7 +308,7 @@ static void UA_NodeId_Expanded_arena_copy(
 typedef void (*NodeVisitor)(
     memory_arena* arena,
     String_Builder* sb,
-    UA_NodeId_Expanded nodes[],
+    UaNodeIdExpanded nodes[],
     u32 idx,
     u32 depth,
     void* user);
@@ -302,7 +316,7 @@ typedef void (*NodeVisitor)(
 static void traverse_subtree_visit(
     memory_arena* arena,
     String_Builder* sb,
-    UA_NodeId_Expanded nodes[],
+    UaNodeIdExpanded nodes[],
     u32 idx,
     u32 depth,
     NodeVisitor visitor,
@@ -319,7 +333,7 @@ static void traverse_subtree_visit(
 }
 
 static void UA_NodeId_Expanded_toString(
-    memory_arena* arena, String_Builder* sb, const UA_NodeId_Expanded* node) {
+    memory_arena* arena, String_Builder* sb, const UaNodeIdExpanded* node) {
     UA_nodeId_toString(arena, sb, node->nodeid);
     sb_appendf_arena(
         arena,
@@ -332,12 +346,12 @@ static void UA_NodeId_Expanded_toString(
 static void visit_print(
     memory_arena* arena,
     String_Builder* sb,
-    UA_NodeId_Expanded nodes[],
+    UaNodeIdExpanded nodes[],
     u32 idx,
     u32 depth,
     void* user) {
     (void)user;
-    UA_NodeId_Expanded* node = &nodes[idx];
+    UaNodeIdExpanded* node = &nodes[idx];
     sb_appendf_arena(arena, sb, "%*s[%u] ", (int)(depth * 2), "", idx);
     UA_NodeId_Expanded_toString(arena, sb, node);
     sb_appendf_arena(arena, sb, "\n");
@@ -346,7 +360,7 @@ static void visit_print(
 static void visit_direct_children(
     memory_arena* arena,
     String_Builder* sb,
-    UA_NodeId_Expanded nodes[],
+    UaNodeIdExpanded nodes[],
     u32 parent_idx,
     NodeVisitor visitor,
     void* user) {
@@ -367,8 +381,8 @@ static void visit_direct_children(
 }
 
 static void explore_children(
-    memory_arena* strArena, UA_Client* client, Node_Pool* nodes, u64 targetIdx) {
-    UA_NodeId_Expanded* root = &nodes->items[targetIdx];
+    memory_arena* strArena, UA_Client* client, NodePool* nodes, u64 targetIdx) {
+    UaNodeIdExpanded* root = &nodes->items[targetIdx];
 
     UA_BrowseRequest bReq;
     UA_BrowseRequest_init(&bReq);
@@ -388,11 +402,11 @@ static void explore_children(
     if (bResp.resultsSize > 0) {
         for (size_t i = 0; i < bResp.results[0].referencesSize; ++i) {
             UA_ReferenceDescription* ref = &bResp.results[0].references[i];
-            UA_NodeId_Expanded child = {0};
+            UaNodeIdExpanded child = {0};
 
             UA_NodeId_Expanded_arena_copy(strArena, ref, &child);
-            u32 childIdx = NodePool_add(nodes, child);
-            NodePool_add_child(nodes, childIdx, targetIdx);
+            // u32 childIdx = NodePool_add(nodes, child);
+            // NodePool_add_child(nodes, childIdx, targetIdx);
         }
     } else {
         log_warn("[EXPLORE] Browse failed or no results for node");
@@ -406,7 +420,7 @@ static void traverse_subtree(
     memory_arena* arena, String_Builder* sb, arr_NodeId_Expanded* nodes, u32 idx, u32 indent) {
     if (idx == 0) return;  // 0 = null/sentinel
 
-    UA_NodeId_Expanded* n = &nodes->items[idx];
+    UaNodeIdExpanded* n = &nodes->items[idx];
 
     sb_appendf_arena(arena, sb, "%*s[%u] ", (int)(indent * 2), "", idx);
     UA_NodeId_Expanded_toString(arena, sb, n);
@@ -500,13 +514,13 @@ void dispatch_command(const char* input, uint32_t state, void* userdata) {
 typedef struct context {
     memory_arena* strArena;
     memory_arena* printArena;
-    Node_Pool nodes;
+    NodePool nodes;
     UA_Client* client;
     uint32_t current;
     uint32_t root;
 } context;
 
-static UA_NodeId_Expanded* thing_get_current_node(context* ctx) {
+static UaNodeIdExpanded* thing_get_current_node(context* ctx) {
     assert(ctx->current != 0 && "sholdnt happen lol");
     return &ctx->nodes.items[ctx->current];
 }
@@ -628,7 +642,7 @@ void completion_callback(
 }
 
 int main(int argc, char* argv[]) {
-    printf("sizeof uanode:%zu", sizeof(UA_NodeId_Expanded));
+    printf("sizeof uanode:%zu", sizeof(UaNodeIdExpanded));
     UA_Client* client = UA_Client_new();
     UA_ClientConfig* cc = UA_Client_getConfig(client);
     UA_ClientConfig_setDefault(cc);
@@ -644,37 +658,41 @@ int main(int argc, char* argv[]) {
 
     // arr_NodeId_Expanded nodes = {0};
     // memset(&ctx.nodes, 0, sizeof(ctx.nodes));
-    NodePool_init(&ctx.nodes);
+    node_pool_init(&ctx.nodes);
 
     log_set_level(LOG_TRACE);
-    ctx.root = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 85)});
+    // ctx.root =
+    NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 85)});
     ctx.current = ctx.root;
     printPool(&ctx.nodes);
-    u32 idx = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 15)});
-    u32 idx2 = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 25)});
-    u32 idx3 = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    NodeRef ref1 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 15)});
+    NodeRef ref2 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 25)});
+    node_pool_remove(&ctx.nodes, ref1);
+    node_pool_remove(&ctx.nodes, ref2);
+    ref1 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 15)});
+    ref2 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 25)});
+    NodeRef ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
     printPool(&ctx.nodes);
-    NodePool_remove(&ctx.nodes, 2);
-    NodePool_remove(&ctx.nodes, 3);
-    printPool(&ctx.nodes);
-    NodePool_remove(&ctx.nodes, 4);
-    idx = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 15)});
-    idx2 = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 25)});
-    idx3 = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
-    NodePool_remove(&ctx.nodes, 3);
-    NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
-    NodePool_remove(&ctx.nodes, 3);
-    NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
-    NodePool_remove(&ctx.nodes, 3);
-    NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
-    NodePool_remove(&ctx.nodes, 3);
-    NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
-    NodePool_remove(&ctx.nodes, 3);
-    NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    node_pool_remove(&ctx.nodes, ref3);
+    ref1 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 15)});
+    ref2 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 25)});
+    ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    node_pool_remove(&ctx.nodes, ref1);
+    node_pool_remove(&ctx.nodes, ref2);
+    node_pool_remove(&ctx.nodes, ref3);
+    ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    node_pool_remove(&ctx.nodes, ref3);
+    ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    node_pool_remove(&ctx.nodes, ref3);
+    ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    node_pool_remove(&ctx.nodes, ref3);
+    ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    node_pool_remove(&ctx.nodes, ref3);
+    ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
 
     printPool(&ctx.nodes);
 
-    u32 idx4 = NodePool_add(&ctx.nodes, (UA_NodeId_Expanded){.nodeid = UA_NODEID_NUMERIC(0, 45)});
+    // u32 idx4 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 45)});
 
     String_Builder sb = {0};
     thing_get_current_node(&ctx)->explored = true;
