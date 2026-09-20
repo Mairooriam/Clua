@@ -134,10 +134,12 @@ typedef struct {
     NodeRef firstChildRef;
     NodeRef nextSiblingRef;
     NodeRef prevSiblingRef;
+    uint32_t childNumber;
+    uint32_t childrenCount;
     bool explored;
 } UaNodeIdExpanded;
 
-#define MAX_NODES 150
+#define MAX_NODES 15
 
 typedef struct Node_Pool {
     UaNodeIdExpanded items[MAX_NODES];
@@ -264,29 +266,36 @@ static void node_pool_remove(NodePool* pool, NodeRef ref) {
 }
 
 static void NodePool_add_child(NodePool* nodes, NodeRef childRef, NodeRef targetRef) {
-    UaNodeIdExpanded* target = node_pool_get(nodes, targetRef);
+    UaNodeIdExpanded* parent = node_pool_get(nodes, targetRef);
     UaNodeIdExpanded* child = node_pool_get(nodes, childRef);
     // TODO: add some debug time error checking??
 
-    if (node_cmp(target->firstChildRef, NODE_NILL)) {
-        target->firstChildRef = childRef;
+    if (node_cmp(parent->firstChildRef, NODE_NILL)) {
+        parent->firstChildRef = childRef;
         child->parentRef = targetRef;
+        parent->childrenCount++;
+        child->childNumber = parent->childrenCount;
         return;
     }
     child->parentRef = targetRef;
 
-    UaNodeIdExpanded* firstChild = node_pool_get(nodes, target->firstChildRef);
+    UaNodeIdExpanded* firstChild = node_pool_get(nodes, parent->firstChildRef);
+    // TODO: simplify repeating logic.
     if (node_cmp(firstChild->prevSiblingRef, NODE_NILL)) {
         firstChild->prevSiblingRef = childRef;
         firstChild->nextSiblingRef = childRef;
-        child->nextSiblingRef = target->firstChildRef;
-        child->prevSiblingRef = target->firstChildRef;
+        child->nextSiblingRef = parent->firstChildRef;
+        child->prevSiblingRef = parent->firstChildRef;
+        parent->childrenCount++;
+        child->childNumber = parent->childrenCount;
     } else {
         NodeRef oldLastSiblingRef = firstChild->prevSiblingRef;
         firstChild->prevSiblingRef = childRef;
-        child->nextSiblingRef = target->firstChildRef;
+        child->nextSiblingRef = parent->firstChildRef;
         node_pool_get(nodes, oldLastSiblingRef)->nextSiblingRef = childRef;
         child->prevSiblingRef = oldLastSiblingRef;
+        parent->childrenCount++;
+        child->childNumber = parent->childrenCount;
     }
 }
 
@@ -309,6 +318,16 @@ static void UA_NodeId_Expanded_arena_copy(
 
 typedef void (*NodeVisitor)(
     memory_arena* arena, String_Builder* sb, NodePool* nodes, NodeRef ref, u32 depth, void* user);
+
+typedef enum UserDataType {
+    UDT_IDX,
+} UserDataType;
+typedef struct VisitorUserData {
+    UserDataType type;
+    union {
+        uint32_t idx;
+    };
+} VisitorUserData;
 
 static void traverse_subtree_visit(
     memory_arena* arena,
@@ -338,10 +357,9 @@ static void UA_NodeId_Expanded_toString(
 static void visit_print(
     memory_arena* arena, String_Builder* sb, NodePool* pool, NodeRef ref, u32 depth, void* user) {
     (void)user;
-
     UaNodeIdExpanded* node = node_pool_get(pool, ref);
-    // UaNodeIdExpanded* node = &nodes[idx];
-    sb_appendf_arena(arena, sb, "%*s[%u] ", (int)(depth * 2), "", ref.idx);
+    sb_appendf_arena(
+        arena, sb, "%*s[%u][%u:%u] ", (int)(depth * 2), "", node->childNumber, ref.idx, ref.gen);
     UA_NodeId_Expanded_toString(arena, sb, node);
     sb_appendf_arena(arena, sb, "\n");
 }
@@ -357,11 +375,11 @@ static void visit_direct_children(
     NodeRef firstChildRef = parent->firstChildRef;
 
     if (node_cmp(firstChildRef, NODE_NILL)) {
-        log_warn("No Children!");
+        log_warn("No Children to print!");
         return;
     }
 
-    UaNodeIdExpanded* firstChild = node_pool_get(pool, parent->firstChildRef);
+    // UaNodeIdExpanded* firstChild = node_pool_get(pool, parent->firstChildRef);
     NodeRef cur = firstChildRef;
     do {
         visitor(arena, sb, pool, cur, 1, user);
@@ -511,21 +529,15 @@ typedef struct context {
     NodeRef root;
 } context;
 
-static UaNodeIdExpanded* thing_get_current_node(context* ctx) {
-    // assert(ctx->current != 0 && "sholdnt happen lol");
-    // return &ctx->nodes.items[ctx->current];
-}
-
 void cmd_ls(void* userdata, const char* args) {
     context* ctx = (context*)userdata;
     String_Builder sb = {0};
     arena_reset(ctx->printArena, false);
-    sb_appendf_arena(ctx->printArena, &sb, "%*s{%u} ", (int)(0 * 2), "", ctx->current);
-    UA_NodeId_Expanded_toString(ctx->printArena, &sb, thing_get_current_node(ctx));
+    sb_appendf_arena(ctx->printArena, &sb, "%*s[0]{%u} ", (int)(0 * 2), "", ctx->current.idx);
+    UA_NodeId_Expanded_toString(ctx->printArena, &sb, node_pool_get(&ctx->nodes, ctx->current));
     sb_appendf_arena(ctx->printArena, &sb, "\n");
 
-    // visit_direct_children(ctx->printArena, &sb, ctx->nodes.items, ctx->current, visit_print,
-    // NULL);
+    visit_direct_children(ctx->printArena, &sb, &ctx->nodes, ctx->current, visit_print, NULL);
     String_View sv = sb_to_sv(sb);
     printf(SV_Fmt "\n", SV_ARG(sv));
 }
@@ -534,28 +546,24 @@ void cmd_cd_up(void* userdata, const char* args) {
     String_Builder sb = {0};
     arena_reset(ctx->printArena, false);
 
-    // UA_NodeId_Expanded* currentNode = thing_get_current_node(ctx);
-    // u32 parentIdx = currentNode->parentIdx;
-    // if (!parentIdx) {
-    //     log_warn("No parent to cd.. back to");
-    //     return;
-    // }
-    //
-    // ctx->current = parentIdx;
-    // if (currentNode->explored) {
-    //     visit_direct_children(
-    //         ctx->printArena, &sb, ctx->nodes.items, ctx->current, visit_print, NULL);
-    //     String_View sv = sb_to_sv(sb);
-    //     printf(SV_Fmt "\n", SV_ARG(sv));
-    // } else {
-    //     ctx->nodes.items[ctx->current].explored = true;
-    //     explore_children(
-    //         ctx->nodeArena, ctx->strArena, ctx->client, ctx->nodes.items, ctx->current);
-    //     visit_direct_children(
-    //         ctx->printArena, &sb, ctx->nodes.items, ctx->current, visit_print, NULL);
-    //     String_View sv = sb_to_sv(sb);
-    //     printf(SV_Fmt "\n", SV_ARG(sv));
-    // }
+    UaNodeIdExpanded* currentNode = node_pool_get(&ctx->nodes, ctx->current);
+    if (node_cmp(currentNode->parentRef, NODE_NILL)) {
+        log_warn("No parent to cd.. back to");
+        return;
+    }
+
+    ctx->current = currentNode->parentRef;
+    if (currentNode->explored) {
+        visit_direct_children(ctx->printArena, &sb, &ctx->nodes, ctx->current, visit_print, NULL);
+        String_View sv = sb_to_sv(sb);
+        printf(SV_Fmt "\n", SV_ARG(sv));
+    } else {
+        node_pool_get(&ctx->nodes, ctx->current)->explored = true;
+        explore_children(ctx->strArena, ctx->client, &ctx->nodes, ctx->current);
+        visit_direct_children(ctx->printArena, &sb, &ctx->nodes, ctx->current, visit_print, NULL);
+        String_View sv = sb_to_sv(sb);
+        printf(SV_Fmt "\n", SV_ARG(sv));
+    }
 }
 
 void cmd_cd(void* userdata, const char* args) {
@@ -564,30 +572,45 @@ void cmd_cd(void* userdata, const char* args) {
     String_Builder sb = {0};
     arena_reset(printArena, false);
 
-    // if (strcmp(args, "..") == 0) {
-    //     cmd_cd_up(ctx, "");
-    // }
-    //
-    // // TARGET NODE
-    // int index;
-    // if (sscanf(args, "%d", &index) != 1) {
-    //     log_warn("No such node available");
-    //     return;
-    // }
-    // ctx->current = index;
-    // UA_NodeId_Expanded* node = &ctx->nodes.items[ctx->current];
-    //
-    // if (node->explored) {
-    //     visit_direct_children(printArena, &sb, ctx->nodes.items, index, visit_print, NULL);
-    //     String_View sv = sb_to_sv(sb);
-    //     printf(SV_Fmt "\n", SV_ARG(sv));
-    // } else {
-    //     ctx->nodes.items[ctx->current].explored = true;
-    //     explore_children(ctx->nodeArena, ctx->strArena, ctx->client, ctx->nodes.items, index);
-    //     visit_direct_children(printArena, &sb, ctx->nodes.items, index, visit_print, NULL);
-    //     String_View sv = sb_to_sv(sb);
-    //     printf(SV_Fmt "\n", SV_ARG(sv));
-    // }
+    if (strcmp(args, "..") == 0) {
+        cmd_cd_up(ctx, "");
+    }
+
+    // TARGET NODE
+    int index;
+    if (sscanf(args, "%d", &index) != 1) {
+        log_warn("No such node available");
+        return;
+    }
+    if (index < 0) {
+        log_warn("negative value not supported");
+        return;
+    }
+
+    NodeRef firstChild = node_pool_get(&ctx->nodes, ctx->current)->firstChildRef;
+    if (node_cmp(firstChild, NODE_NILL)) {
+        log_warn("No Children!");
+        return;
+    }
+
+    uint32_t i = 1;
+    NodeRef current = firstChild;
+    do {
+        UaNodeIdExpanded* n = node_pool_get(&ctx->nodes, current);
+        if ((uint32_t)index == i) {
+            break;
+        }
+        current = n->nextSiblingRef;
+        i++;
+    } while (!node_cmp(current, firstChild));
+
+    UaNodeIdExpanded* target = node_pool_get(&ctx->nodes, current);
+    ctx->current = current;
+    if (!target->explored) {
+        target->explored = true;
+        explore_children(ctx->strArena, ctx->client, &ctx->nodes, current);
+    }
+    cmd_ls(ctx, NULL);
 }
 void cmd_browse(void* userdata, const char* args) {
     // Should first delete the nodes children its browsing.
@@ -655,8 +678,8 @@ int main(int argc, char* argv[]) {
     node_pool_init(&ctx.nodes);
 
     log_set_level(LOG_TRACE);
-    ctx.root = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 85)});
-    ctx.current = ctx.root;
+    // ctx.root = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 85)});
+    // ctx.current = ctx.root;
     // printPool(&ctx.nodes);
     // NodeRef ref1 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0,
     // 15)}); NodeRef ref2 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid =
@@ -682,11 +705,22 @@ int main(int argc, char* argv[]) {
     // ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
     //
     // printPool(&ctx.nodes);
-
+    //
+    // ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    // node_pool_remove(&ctx.nodes, ref3);
+    // ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    // node_pool_remove(&ctx.nodes, ref3);
+    // ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    // node_pool_remove(&ctx.nodes, ref3);
+    // ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    // node_pool_remove(&ctx.nodes, ref3);
+    // ref3 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 35)});
+    // printPool(&ctx.nodes);
+    //
     // u32 idx4 = NodePool_add(&ctx.nodes, (UaNodeIdExpanded){.nodeid = UA_NODEID_NUMERIC(0, 45)});
 
     String_Builder sb = {0};
-    thing_get_current_node(&ctx)->explored = true;
+    node_pool_get(&ctx.nodes, ctx.current)->explored = true;
     explore_children(ctx.strArena, ctx.client, &ctx.nodes, ctx.root);
     visit_direct_children(ctx.printArena, &sb, &ctx.nodes, ctx.root, visit_print, NULL);
     String_View sv = sb_to_sv(sb);
