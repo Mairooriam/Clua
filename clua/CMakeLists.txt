@@ -34,6 +34,8 @@ endif()
 set(SOURCES
     src/main.c
     src/log.c
+    src/node_pool.c
+    ../database/core/allocator.c
     src/debug_buf.c
     modules/mirua_module.c
     modules/mirua_to_string.c
@@ -62,7 +64,9 @@ target_link_libraries(main PRIVATE
 set(SOURCES
     src/main_test.c
     src/log.c
+    src/node_pool.c
     src/debug_buf.c
+    src/repl.c
     modules/mirua_module.c
     modules/mirua_to_string.c
     modules/mirua_serialization.c

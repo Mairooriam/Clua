@@ -1,3 +1,4 @@
+#define NOB_IMPLEMENTATION
 #include "allocator.h"
 
 #include <stdlib.h>

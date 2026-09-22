@@ -114,3 +114,11 @@ int fs_sb_get_executable_dir(memory_arena* arena, String_Builder* sb) {
     }
     return countWithOutNull;
 }
+static bool fs_file_exists(const char* filename) {
+    FILE* fp = fopen(filename, "r");
+    if (fp) {
+        fclose(fp);
+        return true;
+    }
+    return false;
+}

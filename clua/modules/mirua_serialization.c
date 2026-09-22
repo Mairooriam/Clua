@@ -1,8 +1,9 @@
 #include "mirua_serialization.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include <assert.h>
+
 #include "mirua_types_internal.h"
 #include "open62541/types.h"
 #include "utils.h"
@@ -72,7 +73,8 @@ static size_t telegraf_serialize_node(char* buf, size_t bufsize, const MiruaNode
 
     if (safe_snprintf(buf, &offset, bufsize, "[[inputs.opcua.nodes]]\n") != 0) return SIZE_MAX;
 
-    // Derive unique name from string identifier path (e.g. "::AsGlobalPV:OK10_IO.Din.Spare1" -> "OK10_IO_Din_Spare1")
+    // Derive unique name from string identifier path (e.g. "::AsGlobalPV:OK10_IO.Din.Spare1" ->
+    // "OK10_IO_Din_Spare1")
     if (node->nodeid.identifierType == UA_NODEIDTYPE_STRING) {
         const char* src = (const char*)node->nodeid.identifier.string.data;
         size_t len = node->nodeid.identifier.string.length;
@@ -80,33 +82,59 @@ static size_t telegraf_serialize_node(char* buf, size_t bufsize, const MiruaNode
         // Find last ':' to skip namespace prefix like "::AsGlobalPV:"
         const char* last_colon = NULL;
         for (size_t i = len; i > 0; i--) {
-            if (src[i - 1] == ':') { last_colon = src + i - 1; break; }
+            if (src[i - 1] == ':') {
+                last_colon = src + i - 1;
+                break;
+            }
         }
-        if (last_colon) { len -= (size_t)(last_colon - src) + 1; src = last_colon + 1; }
+        if (last_colon) {
+            len -= (size_t)(last_colon - src) + 1;
+            src = last_colon + 1;
+        }
 
         // Replace '.' with '_' into a temp buffer
         char name_buf[256];
         size_t name_len = len < sizeof(name_buf) - 1 ? len : sizeof(name_buf) - 1;
         memcpy(name_buf, src, name_len);
-        for (size_t i = 0; i < name_len; i++) if (name_buf[i] == '.') name_buf[i] = '_';
+        for (size_t i = 0; i < name_len; i++)
+            if (name_buf[i] == '.') name_buf[i] = '_';
         name_buf[name_len] = '\0';
 
         if (safe_snprintf(buf, &offset, bufsize, "name = \"%s\"\n", name_buf) != 0) return SIZE_MAX;
     } else {
         // Fallback to browse name for numeric/GUID identifiers
-        if (safe_snprintf(buf, &offset, bufsize, "name = \"%.*s\"\n",
-                          (int)node->name.name.length, node->name.name.data) != 0) return SIZE_MAX;
+        if (safe_snprintf(
+                buf,
+                &offset,
+                bufsize,
+                "name = \"%.*s\"\n",
+                (int)node->name.name.length,
+                node->name.name.data) != 0)
+            return SIZE_MAX;
     }
 
-    if (safe_snprintf(buf, &offset, bufsize, "namespace = \"%u\"\n", node->nodeid.namespaceIndex) != 0) return SIZE_MAX;
+    if (safe_snprintf(buf, &offset, bufsize, "namespace = \"%u\"\n", node->nodeid.namespaceIndex) !=
+        0)
+        return SIZE_MAX;
 
     if (node->nodeid.identifierType == UA_NODEIDTYPE_STRING) {
-        if (safe_snprintf(buf, &offset, bufsize, "identifier_type = \"%s\"\n", "s") != 0) return SIZE_MAX;
-        if (safe_snprintf(buf, &offset, bufsize, "identifier = \"%.*s\"\n",
-                          (int)node->nodeid.identifier.string.length, node->nodeid.identifier.string.data) != 0) return SIZE_MAX;
+        if (safe_snprintf(buf, &offset, bufsize, "identifier_type = \"%s\"\n", "s") != 0)
+            return SIZE_MAX;
+        if (safe_snprintf(
+                buf,
+                &offset,
+                bufsize,
+                "identifier = \"%.*s\"\n",
+                (int)node->nodeid.identifier.string.length,
+                node->nodeid.identifier.string.data) != 0)
+            return SIZE_MAX;
     } else if (node->nodeid.identifierType == UA_NODEIDTYPE_NUMERIC) {
-        if (safe_snprintf(buf, &offset, bufsize, "identifier_type = \"%s\"\n", "i") != 0) return SIZE_MAX;
-        if (safe_snprintf(buf, &offset, bufsize, "identifier = \"%u\"\n", node->nodeid.identifier.numeric) != 0) return SIZE_MAX;
+        if (safe_snprintf(buf, &offset, bufsize, "identifier_type = \"%s\"\n", "i") != 0)
+            return SIZE_MAX;
+        if (safe_snprintf(
+                buf, &offset, bufsize, "identifier = \"%u\"\n", node->nodeid.identifier.numeric) !=
+            0)
+            return SIZE_MAX;
     } else if (node->nodeid.identifierType == UA_NODEIDTYPE_BYTESTRING) {
         assert(0 && "not implemented");
         return SIZE_MAX;
@@ -124,7 +152,8 @@ static size_t telegraf_serialize_nodes(char* buf, size_t bufsize, const mirua_t_
     if (safe_snprintf(buf, &offset, bufsize, "#GENERATED NODES\n") != 0) return SIZE_MAX;
 
     for (size_t i = 0; i < nodes->size; i++) {
-        size_t node_written = telegraf_serialize_node(buf + offset, bufsize - offset, &nodes->nodeIds[i]);
+        size_t node_written =
+            telegraf_serialize_node(buf + offset, bufsize - offset, &nodes->nodeIds[i]);
         if (node_written == SIZE_MAX) return SIZE_MAX;
         offset += node_written;
         if (safe_snprintf(buf, &offset, bufsize, "\n") != 0) return SIZE_MAX;
@@ -157,6 +186,7 @@ static size_t telegraf_serialize_nodes_to_file(const mirua_t_NodeList* nodes, FI
     free(buf);
     return 0;
 }
+
 MiruaNodeSerializer* mirua_serializer_get(SerializerFormat format) {
     // static MiruaNodeSerializer csv_serializer = {
     //     .serialize_node = csv_serialize_node,
