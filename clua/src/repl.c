@@ -8,13 +8,13 @@
 #include "mirua_serialization.h"
 #include "node_pool.h"
 // TELEGRAF2
-static size_t telegraf_serialize_node(
+size_t telegraf_serialize_node(
     memory_arena* arena, String_Builder* sb, const UaNodeIdExpanded* node) {
     sb_appendf_arena(arena, sb, "[[inputs.opcua.nodes]]\n");
-    // if (safe_snprintf(buf, &offset, bufsize, "[[inputs.opcua.nodes]]\n") != 0) return SIZE_MAX;
 
-    // Derive unique name from string identifier path (e.g. "::AsGlobalPV:OK10_IO.Din.Spare1" ->
-    // "OK10_IO_Din_Spare1")
+    // TOOD:
+    //  Derive unique name from string identifier path (e.g. "::AsGlobalPV:OK10_IO.Din.Spare1" ->
+    //  "OK10_IO_Din_Spare1")
     if (node->nodeid.identifierType == UA_NODEIDTYPE_STRING) {
         const char* src = (const char*)node->nodeid.identifier.string.data;
         size_t len = node->nodeid.identifier.string.length;
@@ -40,8 +40,6 @@ static size_t telegraf_serialize_node(
             if (name_buf[i] == '.') name_buf[i] = '_';
         name_buf[name_len] = '\0';
 
-        // if (safe_snprintf(buf, &offset, bufsize, "name = \"%s\"\n", name_buf) != 0) return
-        // SIZE_MAX;
         sb_appendf_arena(arena, sb, "name = \"%s\"\n", name_buf);
     } else {
         // Fallback to browse name for numeric/GUID identifiers
@@ -51,26 +49,11 @@ static size_t telegraf_serialize_node(
             "name = \"%.*s\"\n",
             (int)node->browseName.name.length,
             node->browseName.name.data);
-
-        // if (safe_snprintf(
-        //         buf,
-        //         &offset,
-        //         bufsize,
-        //         "name = \"%.*s\"\n",
-        //         (int)node->name.name.length,
-        //         node->name.name.data) != 0)
-        //     return SIZE_MAX;
     }
 
-    // if (safe_snprintf(buf, &offset, bufsize, "namespace = \"%u\"\n", node->nodeid.namespaceIndex)
-    // !=
-    //     0)
-    //     return SIZE_MAX;
     sb_appendf_arena(arena, sb, "namespace = \"%u\"\n", node->nodeid.namespaceIndex);
 
     if (node->nodeid.identifierType == UA_NODEIDTYPE_STRING) {
-        // if (safe_snprintf(buf, &offset, bufsize, "identifier_type = \"%s\"\n", "s") != 0)
-        //     return SIZE_MAX;
         sb_appendf_arena(arena, sb, "identifier_type = \"%s\"\n", "s");
         sb_appendf_arena(
             arena,
@@ -79,25 +62,9 @@ static size_t telegraf_serialize_node(
             (int)node->nodeid.identifier.string.length,
             node->nodeid.identifier.string.data);
 
-        // if (safe_snprintf(
-        //         buf,
-        //         &offset,
-        //         bufsize,
-        //         "identifier = \"%.*s\"\n",
-        //         (int)node->nodeid.identifier.string.length,
-        //         node->nodeid.identifier.string.data) != 0)
-        //     return SIZE_MAX;
     } else if (node->nodeid.identifierType == UA_NODEIDTYPE_NUMERIC) {
-        // if (safe_snprintf(buf, &offset, bufsize, "identifier_type = \"%s\"\n", "i") != 0)
-        //     return SIZE_MAX;
         sb_appendf_arena(arena, sb, "identifier_type = \"%s\"\n", "i");
         sb_appendf_arena(arena, sb, "identifier = \"%u\"\n", node->nodeid.identifier.numeric);
-
-        // if (safe_snprintf(
-        //         buf, &offset, bufsize, "identifier = \"%u\"\n", node->nodeid.identifier.numeric)
-        //         !=
-        //     0)
-        //     return SIZE_MAX;
 
     } else if (node->nodeid.identifierType == UA_NODEIDTYPE_BYTESTRING) {
         assert(0 && "not implemented");
@@ -110,48 +77,16 @@ static size_t telegraf_serialize_node(
     return 0;
 }
 
-static size_t telegraf_serialize_nodes(
+size_t telegraf_serialize_nodes(
     memory_arena* arena, String_Builder* sb, NodePool* pool, arr_NodeRef* refs) {
-    // if (safe_snprintf(buf, &offset, bufsize, "#GENERATED NODES\n") != 0) return SIZE_MAX;
     sb_appendf_arena(arena, sb, "#GENERATED NODES\n");
 
     for (size_t i = 0; i < refs->count; i++) {
         UaNodeIdExpanded* node = node_pool_get(pool, refs->items[i]);
         size_t node_written = telegraf_serialize_node(arena, sb, node);
-        // if (node_written == SIZE_MAX) return SIZE_MAX;
-        // if (safe_snprintf(buf, &offset, bufsize, "\n") != 0) return SIZE_MAX;
         sb_appendf_arena(arena, sb, "\n");
     }
 
-    return 0;
-}
-static size_t telegraf_serialize_nodes_to_file(
-    memory_arena* arena, NodePool* nodes, arr_NodeRef* refs, FILE* file) {
-    // size_t bufsize = SERIALIZER_TO_FILE_INITIAL_MEMORY;
-    // char* buf = malloc(bufsize);
-    // if (!buf) return SIZE_MAX;
-
-    // size_t written;
-    String_Builder sb = {0};
-    telegraf_serialize_nodes(arena, &sb, nodes, refs);
-    // while ((written = telegraf_serialize_nodes(buf, bufsize, nodes)) == SIZE_MAX) {
-    //     size_t new_bufsize = bufsize * 2;
-    //     char* new_buf = realloc(buf, new_bufsize);
-    //     if (!new_buf) {
-    //         free(buf);
-    //         return SIZE_MAX;
-    //     }
-    //     buf = new_buf;
-    //     bufsize = new_bufsize;
-    // }
-
-    // if (fwrite(buf, 1, written, file) != written) {
-    //     free(buf);
-    //     return SIZE_MAX;
-    // }
-    fwrite(sb.items, 1, sb.count, file);
-
-    // free(buf);
     return 0;
 }
 void explore_children(
@@ -288,31 +223,13 @@ void cmd_browse(void* userdata, const char* args) {
     //
 }
 static void mirua_save2(context* ctx, int start, int end) {
-    // TOOO: check that it is connected.
-    //  if (!ctx->connected) {
-    //      log_error("UA_Client not connected!");
-    //      return;
-    //  }
+    // TOOO: check that it is connected. if needed
 
     // GETTING RANGE OF NODES
-    // mirua_t_NodeList subset;
     assert(start > 0 || end > 0 && "missing start and end");
     assert(start <= end && "end cannot be bigger than start");
 
-    // NODE collection for range
-    //
-    // size_t range_size =
-    //     (end >= start && (size_t)end < ctx->currentChildren.size) ? (size_t)(end - start + 1)
-    // :
-    //     0;
-    size_t count = end - start;
-
     log_trace("[SAVE] supplied with range %i - %i", start, end);
-    // mirua_init_nodeList(&subset, range_size);
-    //
-    //
-    // iterator NodeRef
-    // for(NodeRef ref = ctx->current; )
 
     NodeChildIter it = node_children_begin(&ctx->nodes, ctx->current);
     size_t i = 1;
@@ -366,8 +283,6 @@ static void mirua_save2(context* ctx, int start, int end) {
     }
 
     // FILE HANDLING
-    // const char* filename = ctx->config.output_path ? ctx->config.output_path : "output_file.txt";
-
     String_Builder filePath = {0};
     fs_sb_get_executable_dir(ctx->tempArena, &filePath);
     sb_arena_append_cstr(ctx->tempArena, &filePath, "/../data/output_file_2026.txt");
@@ -407,22 +322,21 @@ static void mirua_save2(context* ctx, int start, int end) {
         end - 1,
         filePath.items,
         mode[0] == 'a' ? "appending" : "overwriting");
-    // MiruaNodeSerializer* serializer = mirua_serializer_get(SERIALIZER_TELEGRF);
+
+    // TODO: add logggin for all the stuff and refine telegraf serializer.
     String_Builder sb = {0};
     telegraf_serialize_nodes(ctx->tempArena, &sb, &ctx->nodes, &refs);
     fwrite(sb.items, 1, sb.count, f);
-
-    if (telegraf_serialize_nodes_to_file(ctx->tempArena, &ctx->nodes, &refs, f) == SIZE_MAX) {
-        log_error("[SAVE] Serialization failed or buffer overflow");
-    } else {
-        printf(
-            "[SAVE] Successfully %s to '%s'\n",
-            mode[0] == 'a' ? "appended" : "saved",
-            filePath.items);
-    }
-
     fclose(f);
-    // mirua_free_nodeList(&subset);
+
+    // if (telegraf_serialize_nodes_to_file(ctx->tempArena, &ctx->nodes, &refs, f) == SIZE_MAX) {
+    //     log_error("[SAVE] Serialization failed or buffer overflow");
+    // } else {
+    //     printf(
+    //         "[SAVE] Successfully %s to '%s'\n",
+    //         mode[0] == 'a' ? "appended" : "saved",
+    //         filePath.items);
+    // }
 }
 void cmd_save(void* userdata, const char* args) {
     // if (strlen(args) == 0) {

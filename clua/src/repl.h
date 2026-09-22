@@ -44,3 +44,8 @@ typedef struct context {
 // TODO: move this elsewhere?
 void explore_children(
     memory_arena* strArena, UA_Client* client, NodePool* nodes, NodeRef targetRef);
+
+size_t telegraf_serialize_node(
+    memory_arena* arena, String_Builder* sb, const UaNodeIdExpanded* node);
+size_t telegraf_serialize_nodes(
+    memory_arena* arena, String_Builder* sb, NodePool* pool, arr_NodeRef* refs);
