@@ -1,6 +1,6 @@
 #pragma once
-#include "../../database/core/types.h"
 #include "open62541/types.h"
+#include <core/types.h>
 
 typedef struct NodeRef {
   u32 idx;

@@ -2,231 +2,251 @@
 
 #include "core/allocator.h"
 #include "core/log.h"
+#include "core/string.h"
 #include "lexer.h"
 #include "open62541/types.h"
+#define SV_ARG(sv) ((int)sv.count), sv.data))
+#define SV_LIT(s) ((String_View){.data = (s), .count = sizeof(s) - 1})
 
-da_UA_NodeId* _parser_parse(Parser* p);
-Token* parser_peek(Parser* p);
-Token* parser_advance(Parser* p);
-Token* parser_advance_until(Parser* p, TokenType type);
-bool parser_match(Parser* p, TokenType type, size_t count);
-bool parser_is_at_end(Parser* parser);
-Token parser_current(Parser* p);
-bool parser_parse_header(Parser* p);
-bool parser_match_identifier(Parser* p, Sv wanted);
-bool parser_parse_string_field(Parser* p, Sv name, char** out);
+da_UA_NodeId *_parser_parse(Parser *p);
+Token *parser_peek(Parser *p);
+Token *parser_advance(Parser *p);
+Token *parser_advance_until(Parser *p, TokenType type);
+bool parser_match(Parser *p, TokenType type, size_t count);
+bool parser_is_at_end(Parser *parser);
+Token parser_current(Parser *p);
+bool parser_parse_header(Parser *p);
+bool parser_match_identifier(Parser *p, String_View wanted);
+bool parser_parse_string_field(Parser *p, String_View name, char **out);
 
-void UA_NodeId_copy_arena(memory_arena* arena, const UA_NodeId* src, UA_NodeId* dst) {
-    memset(dst, 0, sizeof(UA_NodeId));
-    dst->namespaceIndex = src->namespaceIndex;
-    dst->identifierType = src->identifierType;
+void UA_NodeId_copy_arena(memory_arena *arena, const UA_NodeId *src,
+                          UA_NodeId *dst) {
+  memset(dst, 0, sizeof(UA_NodeId));
+  dst->namespaceIndex = src->namespaceIndex;
+  dst->identifierType = src->identifierType;
 
-    switch (src->identifierType) {
-        case UA_NODEIDTYPE_NUMERIC: dst->identifier.numeric = src->identifier.numeric; break;
-        case UA_NODEIDTYPE_GUID: dst->identifier.guid = src->identifier.guid; break;
-        case UA_NODEIDTYPE_STRING: {
-            size_t len = src->identifier.string.length;
-            dst->identifier.string.length = len;
-            if (len) {
-                void* mem = arena_alloc(arena, len, alignof(UA_Byte));
-                memcpy(mem, src->identifier.string.data, len);
-                dst->identifier.string.data = (UA_Byte*)mem;
-            } else {
-                dst->identifier.string.data = NULL;
-            }
-            break;
-        }
-        case UA_NODEIDTYPE_BYTESTRING: {
-            size_t len = src->identifier.byteString.length;
-            dst->identifier.byteString.length = len;
-            if (len) {
-                void* mem = arena_alloc(arena, len, alignof(UA_Byte));
-                memcpy(mem, src->identifier.byteString.data, len);
-                dst->identifier.byteString.data = (UA_Byte*)mem;
-            } else {
-                dst->identifier.byteString.data = NULL;
-            }
-            break;
-        }
-        default: break;
-    }
-}
-
-void parser_init(Parser* parser, arr_Tokens* tokens, memory_arena* arena) {
-    parser->tokens = tokens;
-    parser->current = 0;
-    parser->arena = arena;
-}
-
-Token* parser_peek(Parser* p) {
-    if (p->current >= p->tokens->count) return NULL;
-    return &p->tokens->items[p->current];
-}
-
-Token* parser_advance(Parser* p) {
-    Token* t = parser_peek(p);
-    if (t) p->current++;
-    return t;
-}
-
-Token* parser_advance_until(Parser* p, TokenType type) {
-    Token* t = parser_peek(p);
-    while (t != NULL) {
-        if (t->type != type) {
-            p->current++;
-        } else {
-            return t;
-        }
-
-        parser_advance(p);
-        t = parser_peek(p);
-    }
-    return t;
-}
-
-bool parser_match(Parser* p, TokenType type, size_t count) {
-    for (size_t i = 0; i < count; i++) {
-        Token* t = parser_peek(p);
-        if (!t || t->type != type) return false;
-        p->current++;
-    }
-    return true;
-}
-bool parser_is_at_end(Parser* parser) {
-    if (parser->current >= parser->tokens->count) {
-        return true;
+  switch (src->identifierType) {
+  case UA_NODEIDTYPE_NUMERIC:
+    dst->identifier.numeric = src->identifier.numeric;
+    break;
+  case UA_NODEIDTYPE_GUID:
+    dst->identifier.guid = src->identifier.guid;
+    break;
+  case UA_NODEIDTYPE_STRING: {
+    size_t len = src->identifier.string.length;
+    dst->identifier.string.length = len;
+    if (len) {
+      void *mem = arena_alloc(arena, len, alignof(UA_Byte));
+      memcpy(mem, src->identifier.string.data, len);
+      dst->identifier.string.data = (UA_Byte *)mem;
     } else {
-        return false;
+      dst->identifier.string.data = NULL;
     }
-}
-Token parser_current(Parser* p) {
-    if (p->current < p->tokens->count) {
-        return p->tokens->items[p->current];
+    break;
+  }
+  case UA_NODEIDTYPE_BYTESTRING: {
+    size_t len = src->identifier.byteString.length;
+    dst->identifier.byteString.length = len;
+    if (len) {
+      void *mem = arena_alloc(arena, len, alignof(UA_Byte));
+      memcpy(mem, src->identifier.byteString.data, len);
+      dst->identifier.byteString.data = (UA_Byte *)mem;
     } else {
-        return (Token){TOKEN_EOF, (Sv){NULL, 0}, 0, 0};
+      dst->identifier.byteString.data = NULL;
     }
-}
-bool parser_parse_header(Parser* p) {
-    // const char* expected[] = {"inputs", "opcua", "group", "nodes"};
-    const char* expected[] = {"inputs", "opcua", "nodes"};
-
-    size_t expected_count = sizeof(expected) / sizeof(expected[0]);
-
-    bool found[4] = {false};
-
-    Sv current = parser_current(p).str;
-
-    Sv part;
-    while (current.count != 0) {
-        part = sv2_chop_by_delim(&current, '.');
-
-        for (size_t i = 0; i < expected_count; i++) {
-            if (sv_equal(part, sv_create_from_cstr(expected[i]))) {
-                found[i] = true;
-            }
-        }
-    }
-
-    // TODO: improve error messaging. only find first error and returns that.
-    for (size_t i = 0; i < expected_count; i++) {
-        if (!found[i]) {
-            printf("Missing field: %s\n", expected[i]);
-            return false;
-        }
-    }
-
-    parser_advance(p);
-    parser_advance(p);
-    parser_advance(p);
-    return true;
+    break;
+  }
+  default:
+    break;
+  }
 }
 
-bool parser_match_identifier(Parser* p, Sv wanted) {
-    Token* t = parser_peek(p);
-    if (!t || t->type != TOKEN_IDENTIFIER) return false;
-    if (!sv_equal(t->str, wanted)) return false;
+void parser_init(Parser *parser, arr_Tokens *tokens, memory_arena *arena) {
+  parser->tokens = tokens;
+  parser->current = 0;
+  parser->arena = arena;
+}
+
+Token *parser_peek(Parser *p) {
+  if (p->current >= p->tokens->count)
+    return NULL;
+  return &p->tokens->items[p->current];
+}
+
+Token *parser_advance(Parser *p) {
+  Token *t = parser_peek(p);
+  if (t)
     p->current++;
-    return true;
+  return t;
 }
-bool parser_parse_string_field(Parser* p, Sv name, char** out) {
-    if (!parser_match_identifier(p, name)) return false;
-    Token eq = parser_current(p);
-    if (!parser_match(p, TOKEN_EQUAL, 1)) {
-        printf("invalid format. missing TOKEN_EQUAL at r:%ic:%i\n", eq.line, eq.column);
-        return false;
+
+Token *parser_advance_until(Parser *p, TokenType type) {
+  Token *t = parser_peek(p);
+  while (t != NULL) {
+    if (t->type != type) {
+      p->current++;
+    } else {
+      return t;
     }
-    Token value = parser_current(p);
+
     parser_advance(p);
-    *out = sv_to_cstr_arena(p->arena, value.str);
-    if (!*out) {
-        printf("failed to allocate memory at r:%ic:%i\n", value.line, value.column);
-        exit(EXIT_FAILURE);
-    }
+    t = parser_peek(p);
+  }
+  return t;
+}
+
+bool parser_match(Parser *p, TokenType type, size_t count) {
+  for (size_t i = 0; i < count; i++) {
+    Token *t = parser_peek(p);
+    if (!t || t->type != type)
+      return false;
+    p->current++;
+  }
+  return true;
+}
+bool parser_is_at_end(Parser *parser) {
+  if (parser->current >= parser->tokens->count) {
     return true;
+  } else {
+    return false;
+  }
+}
+Token parser_current(Parser *p) {
+  if (p->current < p->tokens->count) {
+    return p->tokens->items[p->current];
+  } else {
+    return (Token){TOKEN_EOF, (String_View){NULL, 0}, 0, 0};
+  }
+}
+bool parser_parse_header(Parser *p) {
+  // const char* expected[] = {"inputs", "opcua", "group", "nodes"};
+  const char *expected[] = {"inputs", "opcua", "nodes"};
+
+  size_t expected_count = sizeof(expected) / sizeof(expected[0]);
+
+  bool found[4] = {false};
+
+  String_View current = parser_current(p).str;
+
+  String_View part;
+  while (current.count != 0) {
+    part = sv_chop_by_delim(&current, '.');
+
+    for (size_t i = 0; i < expected_count; i++) {
+      if (sv_eq(part, sv_from_cstr(expected[i]))) {
+        found[i] = true;
+      }
+    }
+  }
+
+  // TODO: improve error messaging. only find first error and returns that.
+  for (size_t i = 0; i < expected_count; i++) {
+    if (!found[i]) {
+      printf("Missing field: %s\n", expected[i]);
+      return false;
+    }
+  }
+
+  parser_advance(p);
+  parser_advance(p);
+  parser_advance(p);
+  return true;
 }
 
-da_UA_NodeId* _parser_parse(Parser* p) {
-    da_UA_NodeId* nodes =
-        (da_UA_NodeId*)arena_alloc(p->arena, sizeof(da_UA_NodeId), alignof(da_UA_NodeId));
-    nodes->count = 0;
-    nodes->capacity = 0;
-    nodes->items = NULL;
+bool parser_match_identifier(Parser *p, String_View wanted) {
+  Token *t = parser_peek(p);
+  if (!t || t->type != TOKEN_IDENTIFIER)
+    return false;
+  if (!sv_eq(t->str, wanted))
+    return false;
+  p->current++;
+  return true;
+}
+bool parser_parse_string_field(Parser *p, String_View name, char **out) {
+  if (!parser_match_identifier(p, name))
+    return false;
+  Token eq = parser_current(p);
+  if (!parser_match(p, TOKEN_EQUAL, 1)) {
+    printf("invalid format. missing TOKEN_EQUAL at r:%ic:%i\n", eq.line,
+           eq.column);
+    return false;
+  }
+  Token value = parser_current(p);
+  parser_advance(p);
+  *out = sv_to_cstr_arena(p->arena, value.str);
+  if (!*out) {
+    printf("failed to allocate memory at r:%ic:%i\n", value.line, value.column);
+    exit(EXIT_FAILURE);
+  }
+  return true;
+}
 
-    while (!parser_is_at_end(p)) {
-        if (!parser_match(p, TOKEN_LBRACKET, 2)) {
-            parser_advance(p);
-            continue;
-        }
-        if (!parser_parse_header(p)) {
-            parser_advance_until(p, TOKEN_LBRACKET);
-            continue;
-        }
+da_UA_NodeId *_parser_parse(Parser *p) {
+  da_UA_NodeId *nodes = (da_UA_NodeId *)arena_alloc(
+      p->arena, sizeof(da_UA_NodeId), alignof(da_UA_NodeId));
+  nodes->count = 0;
+  nodes->capacity = 0;
+  nodes->items = NULL;
 
-        char* name = NULL;
-        char* ns = NULL;
-        char* identifier_type = NULL;
-        char* identifier = NULL;
-
-        parser_parse_string_field(p, SV_LIT("name"), &name);
-        parser_parse_string_field(p, SV_LIT("namespace"), &ns);
-        parser_parse_string_field(p, SV_LIT("identifier_type"), &identifier_type);
-        parser_parse_string_field(p, SV_LIT("identifier"), &identifier);
-
-        int len = snprintf(NULL, 0, "ns=%s;%s=%s", ns, identifier_type, identifier);
-        char* nodeid_str = (char*)arena_alloc(p->arena, (size_t)(len + 1), alignof(char));
-        snprintf(nodeid_str, (size_t)(len + 1), "ns=%s;%s=%s", ns, identifier_type, identifier);
-
-        UA_NodeId id;
-        UA_NodeId_init(&id);
-        // TODO: make own ua nodeid creator to not use malloc
-        UA_String ua_str = UA_String_fromChars(nodeid_str);
-        UA_StatusCode status = UA_NodeId_parse(&id, ua_str);
-        UA_String_clear(&ua_str);
-
-        if (status == UA_STATUSCODE_GOOD) {
-            if (nodes->count >= nodes->capacity) {
-                // TODO: this needs refactoring probably since the old DA_ARENA_REALLOC is probalby
-                // not needed anymore since push makes sure it reserves enough space?
-                mir_da_arena_realloc(p->arena, nodes, UA_NodeId);
-            }
-            UA_NodeId_copy_arena(p->arena, &id, &nodes->items[nodes->count++]);
-            UA_NodeId_clear(&id);
-        } else {
-            log_error("Failed to parse NodeId '%s': %s", nodeid_str, UA_StatusCode_name(status));
-            UA_NodeId_clear(&id);
-        }
+  while (!parser_is_at_end(p)) {
+    if (!parser_match(p, TOKEN_LBRACKET, 2)) {
+      parser_advance(p);
+      continue;
+    }
+    if (!parser_parse_header(p)) {
+      parser_advance_until(p, TOKEN_LBRACKET);
+      continue;
     }
 
-    return nodes;
+    char *name = NULL;
+    char *ns = NULL;
+    char *identifier_type = NULL;
+    char *identifier = NULL;
+
+    parser_parse_string_field(p, SV_LIT("name"), &name);
+    parser_parse_string_field(p, SV_LIT("namespace"), &ns);
+    parser_parse_string_field(p, SV_LIT("identifier_type"), &identifier_type);
+    parser_parse_string_field(p, SV_LIT("identifier"), &identifier);
+
+    int len = snprintf(NULL, 0, "ns=%s;%s=%s", ns, identifier_type, identifier);
+    char *nodeid_str =
+        (char *)arena_alloc(p->arena, (size_t)(len + 1), alignof(char));
+    snprintf(nodeid_str, (size_t)(len + 1), "ns=%s;%s=%s", ns, identifier_type,
+             identifier);
+
+    UA_NodeId id;
+    UA_NodeId_init(&id);
+    // TODO: make own ua nodeid creator to not use malloc
+    UA_String ua_str = UA_String_fromChars(nodeid_str);
+    UA_StatusCode status = UA_NodeId_parse(&id, ua_str);
+    UA_String_clear(&ua_str);
+
+    if (status == UA_STATUSCODE_GOOD) {
+      if (nodes->count >= nodes->capacity) {
+        // TODO: this needs refactoring probably since the old DA_ARENA_REALLOC
+        // is probalby not needed anymore since push makes sure it reserves
+        // enough space?
+        mir_da_arena_realloc(p->arena, nodes);
+      }
+      UA_NodeId_copy_arena(p->arena, &id, &nodes->items[nodes->count++]);
+      UA_NodeId_clear(&id);
+    } else {
+      log_error("Failed to parse NodeId '%s': %s", nodeid_str,
+                UA_StatusCode_name(status));
+      UA_NodeId_clear(&id);
+    }
+  }
+
+  return nodes;
 }
 
-da_UA_NodeId* parser_parse(memory_arena* arena, char* config) {
-    Scanner scanner;
-    lx_init(&scanner, config, arena);
-    arr_Tokens* tokens = lx_tokenize(&scanner);
-    Parser parser;
-    parser_init(&parser, tokens, arena);
-    // TODO:  monitored items currently takes
-    // pointer to the nodes so deleting them in temp arena would cause problems
-    return _parser_parse(&parser);
+da_UA_NodeId *parser_parse(memory_arena *arena, char *config) {
+  Scanner scanner;
+  lx_init(&scanner, config, arena);
+  arr_Tokens *tokens = lx_tokenize(&scanner);
+  Parser parser;
+  parser_init(&parser, tokens, arena);
+  // TODO:  monitored items currently takes
+  // pointer to the nodes so deleting them in temp arena would cause problems
+  return _parser_parse(&parser);
 }

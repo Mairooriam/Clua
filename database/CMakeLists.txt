@@ -40,37 +40,21 @@ function(enable_sanitizers target)
 endfunction()
 
 find_package(Threads REQUIRED)
-
+find_package(core REQUIRED)
 #Add tinycthread.c to sources
 set(SOURCES
     # main.c
     db_access.c
-    core/allocator.c
-    core/log.c
+main.c
+lexer.c
+parser.c
 )
 
-add_library(clua_db SHARED ${SOURCES})
-enable_strict(clua_db)
-enable_sanitizers(clua_db)
-target_compile_definitions(clua_db PRIVATE LOG_USE_COLOR) #_CRT_SECURE_NO_WARNINGS)
-# target_compile_options(clua_db PRIVATE -g -fno-omit-frame-pointer)
-target_include_directories(clua_db
-    PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/external
-)
-
-# target_link_options(clua_db PRIVATE -rdynamic)
-target_link_libraries(clua_db PRIVATE sqlite3_dll)
-
-add_executable(clua_db_example main.c lexer.c parser.c core/string.c)
+add_executable(clua_db_example ${SOURCES})
 enable_strict(clua_db_example)
 enable_sanitizers(clua_db_example)
 
-target_link_libraries(clua_db_example PUBLIC clua_db open62541::open62541 Threads::Threads)
+target_link_libraries(clua_db_example PUBLIC core::core open62541::open62541 Threads::Threads)
 
 # Keep compile_commands.json in repo root for LSP/tools
 add_custom_target(sync_compile_commands ALL
@@ -98,7 +82,7 @@ add_custom_command(TARGET clua_db_example POST_BUILD
 )
 add_dependencies(clua_db_example sqlite3_dll copy_schema)
 
-add_dependencies(sync_compile_commands clua_db)
+add_dependencies(sync_compile_commands clua_db_example)
 
 
 
