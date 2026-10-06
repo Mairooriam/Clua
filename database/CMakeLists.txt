@@ -15,6 +15,7 @@ function(enable_strict target)
     target_compile_options(${target} PRIVATE
       -Wall
       -Wextra
+      -Wswitch-enum
       -Wpedantic
       -Wshadow
       -Wconversion
@@ -68,7 +69,7 @@ add_custom_target(sync_compile_commands ALL
 # Copy schema to bin
 # TODO: remove the schema txt file and have it in code?
 add_custom_target(copy_schema ALL
-  COMMAND ${CMAKE_COMMAND} -E copy
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
           ${CMAKE_SOURCE_DIR}/schema.txt
           ${CMAKE_BINARY_DIR}/data/schema.txt
   COMMENT "Copy schema.txt to bin dir"
@@ -82,8 +83,31 @@ add_custom_command(TARGET clua_db_example POST_BUILD
 )
 add_dependencies(clua_db_example sqlite3_dll copy_schema)
 
-add_dependencies(sync_compile_commands clua_db_example)
 
+# --------- PARSER TEST ----------
+# TODO: make in top level CMakeLists.txt?
+enable_testing()
 
+add_executable(parser_test
+  parser_test.c
+  lexer.c
+  parser.c
+)
 
+enable_strict(parser_test)
+enable_sanitizers(parser_test)
 
+target_link_libraries(parser_test PRIVATE
+  core::core
+  open62541::open62541
+  Threads::Threads
+)
+
+add_test(NAME parser_test COMMAND parser_test)
+
+add_custom_target(run_tests ALL
+  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/database
+  DEPENDS parser_test
+  COMMENT "Build parser_test and run tests"
+)
