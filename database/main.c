@@ -18,7 +18,6 @@
 #include <unistd.h>
 
 #include "include/db_access.h"
-#include "lexer.h"
 #include "open62541/client.h"
 #include "open62541/client_config_default.h"
 #include "open62541/client_subscriptions.h"
@@ -34,7 +33,7 @@ typedef struct uadb_context {
     String_Builder dbPath;
     String_Builder opcuaConfigPath;
     UA_Client* client;
-    da_UA_NodeId* nodes;
+    da_ParsedNode* nodes;
     bool connected;
     bool wasDisconnected;
     bool pushBuffer;
@@ -156,7 +155,7 @@ static void handler_TheAnswerChanged(
     }
 }
 static int mirua_subscription_create(
-    UA_Client* client, da_UA_NodeId* nodes, uint32_t* currentSubId) {
+    UA_Client* client, da_ParsedNode* nodes, uint32_t* currentSubId) {
     uadb_context* ctx = (uadb_context*)UA_Client_getContext(client);
 
     UA_CreateSubscriptionRequest subRequest = UA_CreateSubscriptionRequest_default();
@@ -185,7 +184,7 @@ static int mirua_subscription_create(
         arena_alloc(ctx->temporaryArena, nodes->count * sizeof(void*), alignof(void*));
 
     for (size_t i = 0; i < nodes->count; i++) {
-        monRequests[i] = UA_MonitoredItemCreateRequest_default(nodes->items[i]);
+        monRequests[i] = UA_MonitoredItemCreateRequest_default(nodes->items[i].nodeId);
         callbacks[i] = handler_TheAnswerChanged;
         contexts_arr[i] = NULL;
     }
@@ -209,8 +208,8 @@ static int mirua_subscription_create(
             sb_arena_append_buf(
                 ctx->temporaryArena,
                 &monItem.name,
-                ctx->nodes->items[i].identifier.string.data,
-                ctx->nodes->items[i].identifier.string.length);
+                ctx->nodes->items[i].nodeId.identifier.string.data,
+                ctx->nodes->items[i].nodeId.identifier.string.length);
             da_arena_append(ctx->temporaryArena, &ctx->monitoredItems, monItem);
         } else {
             log_warn(

@@ -47,7 +47,6 @@ set(SOURCES
     # main.c
     db_access.c
 main.c
-lexer.c
 parser.c
 )
 
@@ -90,7 +89,6 @@ enable_testing()
 
 add_executable(parser_test
   parser_test.c
-  lexer.c
   parser.c
 )
 

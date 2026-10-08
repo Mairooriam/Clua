@@ -1,14 +1,16 @@
 #include "parser.h"
 
+#include <stdint.h>
+
 #include "core/allocator.h"
+#include "core/lexer.h"
 #include "core/log.h"
 #include "core/string.h"
-#include "lexer.h"
 #include "open62541/types.h"
 #define SV_ARG(sv) ((int)sv.count), sv.data))
 #define SV_LIT(s) ((String_View){.data = (s), .count = sizeof(s) - 1})
 
-da_UA_NodeId* _parser_parse(Parser* p);
+da_ParsedNode* _parser_parse(Parser* p);
 Token* parser_peek(Parser* p);
 Token* parser_advance(Parser* p);
 Token* parser_advance_until(Parser* p, TokenType type);
@@ -18,6 +20,11 @@ Token parser_current(Parser* p);
 bool parser_parse_header(Parser* p);
 bool parser_match_identifier(Parser* p, String_View wanted);
 bool parser_parse_string_field(Parser* p, String_View name, char** out);
+bool parser_parse_integer_field(Parser* p, String_View name, int64_t* out);
+bool parser_parse_boolean_field(Parser* p, String_View name, bool* out);
+
+// TODO: add float when needed
+//  bool parser_parse_float_field(Parser* p, String_View name, int64_t* out);
 
 // TODO: this is at wrong place...
 void UA_NodeId_copy_arena(memory_arena* arena, const UA_NodeId* src, UA_NodeId* dst) {
@@ -157,27 +164,80 @@ bool parser_parse_string_field(Parser* p, String_View name, char** out) {
     if (!parser_match_identifier(p, name)) return false;
     Token eq = parser_current(p);
     if (!parser_match(p, TOKEN_EQUAL, 1)) {
-        printf("invalid format. missing TOKEN_EQUAL at r:%ic:%i\n", eq.line, eq.column);
+        log_error("invalid format. missing TOKEN_EQUAL at r:%ic:%i", eq.line, eq.column);
         return false;
     }
     Token value = parser_current(p);
     parser_advance(p);
+
+    if (value.type != TOKEN_TEXT) {
+        log_error(
+            "Expected TokenType to be Text, but it is %s. r:%ic:%i",
+            lx_tokenTypeToString(value.type),
+            value.line,
+            value.column);
+        return false;
+    }
+
     *out = sv_to_cstr_arena(p->arena, value.as.string);
     if (!*out) {
-        printf("failed to allocate memory at r:%ic:%i\n", value.line, value.column);
+        log_error("failed to allocate memory at r:%ic:%i", value.line, value.column);
         exit(EXIT_FAILURE);
     }
     return true;
 }
+bool parser_parse_integer_field(Parser* p, String_View name, int64_t* out) {
+    if (!parser_match_identifier(p, name)) return false;
+    Token eq = parser_current(p);
+    if (!parser_match(p, TOKEN_EQUAL, 1)) {
+        log_error("invalid format. missing TOKEN_EQUAL at r:%ic:%i", eq.line, eq.column);
+        return false;
+    }
+    Token value = parser_current(p);
+    parser_advance(p);
 
-da_UA_NodeId* _parser_parse(Parser* p) {
-    da_UA_NodeId* nodes =
-        (da_UA_NodeId*)arena_alloc(p->arena, sizeof(da_UA_NodeId), alignof(da_UA_NodeId));
-    nodes->count = 0;
-    nodes->capacity = 0;
-    nodes->items = NULL;
+    if (value.type != TOKEN_INTEGER) {
+        log_error(
+            "Expected TokenType to be Integer, but it is %s. r:%ic:%i",
+            lx_tokenTypeToString(value.type),
+            value.line,
+            value.column);
+        return false;
+    }
+
+    *out = value.as.i;
+    return true;
+}
+bool parser_parse_boolean_field(Parser* p, String_View name, bool* out) {
+    if (!parser_match_identifier(p, name)) return false;
+    Token eq = parser_current(p);
+    if (!parser_match(p, TOKEN_EQUAL, 1)) {
+        log_error("invalid format. missing TOKEN_EQUAL at r:%ic:%i", eq.line, eq.column);
+        return false;
+    }
+    Token value = parser_current(p);
+    parser_advance(p);
+
+    if (value.type != TOKEN_BOOLEAN) {
+        log_error(
+            "Expected TokenType to be Integer, but it is %s. r:%ic:%i",
+            lx_tokenTypeToString(value.type),
+            value.line,
+            value.column);
+        return false;
+    }
+
+    *out = value.as.b;
+    return true;
+}
+
+da_ParsedNode* _parser_parse(Parser* p) {
+    // da_ParsedNode* nodes =
+    //     (da_ParsedNode*)arena_alloc(p->arena, sizeof(da_ParsedNode), alignof(da_ParsedNode));
+    da_ParsedNode* nodes = arena_calloc_single(p->arena, da_ParsedNode);
 
     while (!parser_is_at_end(p)) {
+        // Finds the start of an entry
         if (!parser_match(p, TOKEN_LBRACKET, 2)) {
             parser_advance(p);
             continue;
@@ -191,11 +251,16 @@ da_UA_NodeId* _parser_parse(Parser* p) {
         char* ns = NULL;
         char* identifier_type = NULL;
         char* identifier = NULL;
+        int64_t polling = 0;
+        bool historizing = false;
 
+        // TODO: add if and logging to errors.
         parser_parse_string_field(p, SV_LIT("name"), &name);
         parser_parse_string_field(p, SV_LIT("namespace"), &ns);
         parser_parse_string_field(p, SV_LIT("identifier_type"), &identifier_type);
         parser_parse_string_field(p, SV_LIT("identifier"), &identifier);
+        parser_parse_integer_field(p, SV_LIT("polling"), &polling);
+        parser_parse_boolean_field(p, SV_LIT("historizing"), &historizing);
 
         int len = snprintf(NULL, 0, "ns=%s;%s=%s", ns, identifier_type, identifier);
         char* nodeid_str = (char*)arena_alloc(p->arena, (size_t)(len + 1), alignof(char));
@@ -208,29 +273,27 @@ da_UA_NodeId* _parser_parse(Parser* p) {
         UA_StatusCode status = UA_NodeId_parse(&id, ua_str);
         UA_String_clear(&ua_str);
 
-        if (status == UA_STATUSCODE_GOOD) {
-            if (nodes->count >= nodes->capacity) {
-                // TODO: this needs refactoring probably since the old DA_ARENA_REALLOC
-                // is probalby not needed anymore since push makes sure it reserves
-                // enough space?
-                mir_da_arena_realloc(p->arena, nodes);
-            }
-            UA_NodeId_copy_arena(p->arena, &id, &nodes->items[nodes->count++]);
-            UA_NodeId_clear(&id);
-        } else {
+        if (status != UA_STATUSCODE_GOOD) {
             log_error("Failed to parse NodeId '%s': %s", nodeid_str, UA_StatusCode_name(status));
             UA_NodeId_clear(&id);
+            return nodes;
         }
+
+        ParsedNode node = (ParsedNode){
+            .name = name, .nodeId = {0}, .polling = polling, .historizing = historizing};
+        UA_NodeId_copy_arena(p->arena, &id, &node.nodeId);
+        da_arena_append(p->arena, nodes, node);
+        UA_NodeId_clear(&id);
     }
 
     return nodes;
 }
 
-da_UA_NodeId* parser_parse(memory_arena* arena, char* config) {
+da_ParsedNode* parser_parse(memory_arena* arena, char* config) {
     Scanner scanner;
     lx_init(&scanner, config, arena);
     arr_Tokens* tokens = lx_tokenize(&scanner);
-    // log_trace("tokens: \n%s", lx_tokensToStringArena(tokens, arena));
+    log_trace("tokens: \n%s", lx_tokensToStringArena(tokens, arena));
     Parser parser;
     parser_init(&parser, tokens, arena);
     // TODO:  monitored items currently takes
