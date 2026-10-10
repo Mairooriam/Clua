@@ -10,7 +10,7 @@
 #define SV_ARG(sv) ((int)sv.count), sv.data))
 #define SV_LIT(s) ((String_View){.data = (s), .count = sizeof(s) - 1})
 
-da_ParsedNode* _parser_parse(Parser* p);
+da_ParsedNodes* _parser_parse(Parser* p);
 Token* parser_peek(Parser* p);
 Token* parser_advance(Parser* p);
 Token* parser_advance_until(Parser* p, TokenType type);
@@ -22,6 +22,23 @@ bool parser_match_identifier(Parser* p, String_View wanted);
 bool parser_parse_string_field(Parser* p, String_View name, char** out);
 bool parser_parse_integer_field(Parser* p, String_View name, int64_t* out);
 bool parser_parse_boolean_field(Parser* p, String_View name, bool* out);
+bool parser_parse_type_field(Parser* p, String_View name, ValueType* out);
+
+// Macro to avoid mistakes miss typing the return value.
+#define PARSER_TOKEN_CASE(e) \
+    case e: return #e;
+
+const char* parser_value_type_to_string(ValueType type) {
+    switch (type) {
+        PARSER_TOKEN_CASE(VT_SENTINEL)
+        PARSER_TOKEN_CASE(VT_FLOAT)
+        PARSER_TOKEN_CASE(VT_INT)
+        PARSER_TOKEN_CASE(VT_STRING)
+        PARSER_TOKEN_CASE(VT_UNSUPPORTED)
+    }
+
+    return "TOKEN_UNKNOWN";
+}
 
 // TODO: add float when needed
 //  bool parser_parse_float_field(Parser* p, String_View name, int64_t* out);
@@ -230,11 +247,43 @@ bool parser_parse_boolean_field(Parser* p, String_View name, bool* out) {
     *out = value.as.b;
     return true;
 }
+bool parser_parse_type_field(Parser* p, String_View name, ValueType* out) {
+    if (!parser_match_identifier(p, name)) return false;
+    Token eq = parser_current(p);
+    if (!parser_match(p, TOKEN_EQUAL, 1)) {
+        log_error("invalid format. missing TOKEN_EQUAL at r:%ic:%i", eq.line, eq.column);
+        return false;
+    }
+    Token value = parser_current(p);
+    parser_advance(p);
 
-da_ParsedNode* _parser_parse(Parser* p) {
+    if (value.type != TOKEN_TEXT) {
+        log_error(
+            "Expected TokenType to be Integer, but it is %s. r:%ic:%i",
+            lx_tokenTypeToString(value.type),
+            value.line,
+            value.column);
+        return false;
+    }
+
+    // INT
+    if (sv_eq(value.as.string, SV_LIT("INT"))) {
+        *out = VT_INT;
+    } else if (sv_eq(value.as.string, SV_LIT("FLOAT"))) {
+        *out = VT_FLOAT;
+    } else if (sv_eq(value.as.string, SV_LIT("STRING"))) {
+        *out = VT_STRING;
+    } else {
+        *out = VT_UNSUPPORTED;
+        return false;
+    }
+    return true;
+}
+
+da_ParsedNodes* _parser_parse(Parser* p) {
     // da_ParsedNode* nodes =
     //     (da_ParsedNode*)arena_alloc(p->arena, sizeof(da_ParsedNode), alignof(da_ParsedNode));
-    da_ParsedNode* nodes = arena_calloc_single(p->arena, da_ParsedNode);
+    da_ParsedNodes* nodes = arena_calloc_single(p->arena, da_ParsedNodes);
 
     while (!parser_is_at_end(p)) {
         // Finds the start of an entry
@@ -253,6 +302,7 @@ da_ParsedNode* _parser_parse(Parser* p) {
         char* identifier = NULL;
         int64_t polling = 0;
         bool historizing = false;
+        ValueType type = VT_UNSUPPORTED;
 
         // TODO: add if and logging to errors.
         parser_parse_string_field(p, SV_LIT("name"), &name);
@@ -261,6 +311,7 @@ da_ParsedNode* _parser_parse(Parser* p) {
         parser_parse_string_field(p, SV_LIT("identifier"), &identifier);
         parser_parse_integer_field(p, SV_LIT("polling"), &polling);
         parser_parse_boolean_field(p, SV_LIT("historizing"), &historizing);
+        parser_parse_type_field(p, SV_LIT("type"), &type);
 
         int len = snprintf(NULL, 0, "ns=%s;%s=%s", ns, identifier_type, identifier);
         char* nodeid_str = (char*)arena_alloc(p->arena, (size_t)(len + 1), alignof(char));
@@ -280,7 +331,7 @@ da_ParsedNode* _parser_parse(Parser* p) {
         }
 
         ParsedNode node = (ParsedNode){
-            .name = name, .nodeId = {0}, .polling = polling, .historizing = historizing};
+            .name = name, .nodeId = {0}, .polling = polling, .historizing = historizing, .type = type};
         UA_NodeId_copy_arena(p->arena, &id, &node.nodeId);
         da_arena_append(p->arena, nodes, node);
         UA_NodeId_clear(&id);
@@ -289,7 +340,7 @@ da_ParsedNode* _parser_parse(Parser* p) {
     return nodes;
 }
 
-da_ParsedNode* parser_parse(memory_arena* arena, char* config) {
+da_ParsedNodes* parser_parse(memory_arena* arena, char* config) {
     Scanner scanner;
     lx_init(&scanner, config, arena);
     arr_Tokens* tokens = lx_tokenize(&scanner);

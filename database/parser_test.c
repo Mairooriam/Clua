@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <core/allocator.h>
+#include <core/fmt_colors.h>
 #include <core/log.h>
 #include <open62541/types.h>
 #include <stdio.h>
@@ -84,7 +85,7 @@ static void test_parse_one_string_node(void) {
         "identifier_type = \"s\"\n"
         "identifier = \"Machine.Temp\"\n";
 
-    da_ParsedNode* nodes = parser_parse(arena, cfg);
+    da_ParsedNodes* nodes = parser_parse(arena, cfg);
 
     assert(nodes != NULL);
     assert(nodes->count == 1);
@@ -93,6 +94,61 @@ static void test_parse_one_string_node(void) {
     assert(nodes->items[0].polling == 0);
     assert(nodes->items[0].historizing == false);
 
+    arena_free(arena);
+}
+
+
+// -------------------------- type tests -----------------------------
+// TODO: explore X-Macros so tests update when you update supported types.
+#define CFG_TYPES(X)     \
+    X(FLOAT, VT_FLOAT)   \
+    X(INT, VT_INT)       \
+    X(STRING, VT_STRING) \
+    X(BOOL, VT_UNSUPPORTED)
+
+#define CFG_ENTRY(type, expected)      \
+    {"[[inputs.opcua.nodes]]\n"        \
+     "name = \"Temp\"\n"               \
+     "namespace = \"2\"\n"             \
+     "identifier_type = \"s\"\n"       \
+     "identifier = \"Machine.Temp\"\n" \
+     "type = \"" #type "\"",           \
+     expected},
+
+typedef struct {
+    const char* config;
+    ValueType expected;
+} TypeTestCase;
+
+static const TypeTestCase type_tests[] = {CFG_TYPES(CFG_ENTRY)};
+
+#define FMT_ERROR_TYPE(expected, actual)                                                 \
+    fprintf(                                                                             \
+        stderr,                                                                          \
+        C_BOLD C_RED "FAIL: " C_RESET "expected=" C_GREEN "%s" C_RESET ", actual=" C_RED \
+                     "%s" C_RESET "\n",                                                  \
+        (expected),                                                                      \
+        (actual))
+
+static void test_parse_types(void) {
+    memory_arena* arena = arena_create(1024 * 1024);
+    for (size_t i = 0; i < sizeof(type_tests) / sizeof(type_tests[0]); i++) {
+        const TypeTestCase* test = &type_tests[i];
+
+        da_ParsedNodes* nodes = parser_parse(arena, test->config);
+
+        // loops over CFG_TYPES expanded type_tests array.
+        if (nodes->items[0].type != test->expected) {
+            fprintf(stderr, "input:%s\n\n",test->config);
+
+            FMT_ERROR_TYPE(
+                parser_value_type_to_string(test->expected),
+                parser_value_type_to_string(nodes->items[0].type));
+
+
+            assert(nodes->items[0].type == test->expected);
+        }
+    }
     arena_free(arena);
 }
 
@@ -107,7 +163,7 @@ static void test_parse_one_string_node_with_polling_and_historizing(void) {
         "polling = 100\n"
         "historizing = true\n";
 
-    da_ParsedNode* nodes = parser_parse(arena, cfg);
+    da_ParsedNodes* nodes = parser_parse(arena, cfg);
 
     assert(nodes != NULL);
     assert(nodes->count == 1);
@@ -126,6 +182,7 @@ int main(void) {
     test_parse_header_from_lexed_tokens();
     test_parse_one_string_node();
     test_parse_one_string_node_with_polling_and_historizing();
+    test_parse_types();
     // test_test();
 
     puts("parser tests passed");

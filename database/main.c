@@ -33,7 +33,7 @@ typedef struct uadb_context {
     String_Builder dbPath;
     String_Builder opcuaConfigPath;
     UA_Client* client;
-    da_ParsedNode* nodes;
+    da_ParsedNodes* nodes;
     bool connected;
     bool wasDisconnected;
     bool pushBuffer;
@@ -155,7 +155,7 @@ static void handler_TheAnswerChanged(
     }
 }
 static int mirua_subscription_create(
-    UA_Client* client, da_ParsedNode* nodes, uint32_t* currentSubId) {
+    UA_Client* client, da_ParsedNodes* nodes, uint32_t* currentSubId) {
     uadb_context* ctx = (uadb_context*)UA_Client_getContext(client);
 
     UA_CreateSubscriptionRequest subRequest = UA_CreateSubscriptionRequest_default();
